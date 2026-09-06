@@ -9,13 +9,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACERT="$SCRIPT_DIR/overkiz-root-ca-2048.crt"
 NAME_MAP="$SCRIPT_DIR/device-names.json"
 
+# --- Helpers ---
+die() { echo "ERROR: $*" >&2; exit 1; }
+need() { command -v "$1" &>/dev/null || die "'$1' is required but not installed."; }
+need curl; need jq; need python3
+
 # --- Config (override via env or positional args) ---
-GATEWAY="${SOMFY_GATEWAY:-}"
-TOKEN="${SOMFY_TOKEN:-}"
+GATEWAY="${SOMFY_GATEWAY:-${1:-}}"
+TOKEN="${SOMFY_TOKEN:-${2:-}}"
 PORT="${SOMFY_PORT:-8443}"
 
-[[ $# -ge 1 ]] && GATEWAY="$1"
-[[ $# -ge 2 ]] && TOKEN="$2"
+[[ -n "$GATEWAY" ]] || die "Set SOMFY_GATEWAY env var or pass gateway hostname as first argument"
+[[ -n "$TOKEN"   ]] || die "Set SOMFY_TOKEN env var or pass developer token as second argument"
 
 BASE_URL="https://${GATEWAY}:${PORT}/enduser-mobile-web/1/enduserAPI"
 
@@ -29,11 +34,6 @@ BOB_API="https://backoffice-service.ovkube.net/site-api/public/v1"
 OVERKIZ_API="https://ha101-1.overkiz.com/enduser-mobile-web/enduserAPI"
 CLIENT_ID="0d8e920c-1478-11e7-a377-02dd59bd3041_1ewvaqmclfogo4kcsoo0c8k4kso884owg08sg8c40sk4go4ksg"
 CLIENT_SECRET="12k73w1n540g8o4cokg0cw84cog840k84cwggscwg884004kgk"
-
-# --- Helpers ---
-die() { echo "ERROR: $*" >&2; exit 1; }
-need() { command -v "$1" &>/dev/null || die "'$1' is required but not installed."; }
-need curl; need jq; need python3
 
 # --- Build name map from Somfy cloud if not present ---
 if [[ ! -f "$NAME_MAP" ]]; then
