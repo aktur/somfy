@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Description: Somfy TaHoma - Alexa Smart Home Skill (multi-site)
+
+Parameters:
+  AlexaSkillId:
+    Type: String
+    Description: "Alexa Skill ID from the Alexa Developer Console (amzn1.ask.skill.XXXX)"
+  SomfyUser:
+    Type: String
+    Description: "Somfy account email"
+  SomfyPass:
+    Type: String
+    NoEcho: true
+    Description: "Somfy account password"
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 128
+    Environment:
+      Variables:
+        SOMFY_USER: !Ref SomfyUser
+        SOMFY_PASS: !Ref SomfyPass
+
+Resources:
+  SomfyAlexaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: somfy-alexa-skill
+      Handler: handler.lambda_handler
+      CodeUri: lambda/
+      Description: "Handles Alexa Smart Home directives for Somfy TaHoma (multi-site)"
+
+  # Grant Alexa Smart Home permission to invoke this Lambda.
+  # Paste the FunctionArn output into the Alexa Skill endpoint configuration.
+  AlexaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt SomfyAlexaFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: alexa-connectedhome.amazon.com
+      EventSourceToken: !Ref AlexaSkillId
+
+Outputs:
+  FunctionArn:
+    Description: "Lambda ARN to paste into the Alexa Skill endpoint configuration"
+    Value: !GetAtt SomfyAlexaFunction.Arn
