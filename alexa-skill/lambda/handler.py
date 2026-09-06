@@ -1,5 +1,6 @@
 """Alexa Smart Home Skill — Lambda entry point.
 
+
 Directive routing:
   Alexa.Discovery        → handle_discovery
   Alexa.PowerController  → handle_power_controller  (open/close)
@@ -7,6 +8,8 @@ Directive routing:
   Alexa / ReportState    → handle_report_state
   Alexa / KeepAlive      → empty response
 """
+
+from __future__ import annotations
 
 import logging
 import os

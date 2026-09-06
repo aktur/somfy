@@ -1,5 +1,7 @@
 """Alexa Smart Home response builders."""
 
+from __future__ import annotations
+
 import time
 import uuid
 

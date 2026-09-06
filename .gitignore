@@ -1,3 +1,6 @@
 env.sh
 device-names.json
 .aws-sam/
+alexa-skill/.venv/
+alexa-skill/.pytest_cache/
+alexa-skill/__pycache__/
