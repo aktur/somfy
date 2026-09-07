@@ -1,8 +1,10 @@
 """Tests for handler.py — all Somfy API calls are mocked."""
 
+import time
 from unittest.mock import patch
 
 import handler
+import jwt_util
 
 # ---------------------------------------------------------------------------
 # Test data
@@ -11,6 +13,15 @@ import handler
 SITE_OID = "32bf4a8d-7895-4cfd-a64e-00983a386dfe"
 DEVICE_URL = "io://XXXX-XXXX-XXXX/13387958"
 MOCK_TOKEN = "mock-scoped-token"
+MOCK_GINAITE_REFRESH = "mock-ginaite-refresh-token"
+_TEST_SECRET = "test-secret-do-not-use-in-production"
+
+
+def _make_access_jwt() -> str:
+    return jwt_util.encode(
+        {"gr": MOCK_GINAITE_REFRESH, "exp": int(time.time()) + 3600, "t": "access"},
+        _TEST_SECRET,
+    )
 
 MOCK_SETUP = {
     "devices": [
@@ -52,9 +63,13 @@ def _discovery_event():
         "directive": {
             "header": {"namespace": "Alexa.Discovery", "name": "Discover",
                        "payloadVersion": "3", "messageId": "msg-1"},
-            "payload": {"scope": {"type": "BearerToken", "token": "bearer"}},
+            "payload": {"scope": _scope()},
         }
     }
+
+
+def _scope() -> dict:
+    return {"type": "BearerToken", "token": _make_access_jwt()}
 
 
 def _power_event(name, endpoint_id):
@@ -62,7 +77,7 @@ def _power_event(name, endpoint_id):
         "directive": {
             "header": {"namespace": "Alexa.PowerController", "name": name,
                        "payloadVersion": "3", "messageId": "msg-1", "correlationToken": "ct-1"},
-            "endpoint": {"endpointId": endpoint_id},
+            "endpoint": {"endpointId": endpoint_id, "scope": _scope()},
             "payload": {},
         }
     }
@@ -74,7 +89,7 @@ def _range_event(name, endpoint_id, payload):
             "header": {"namespace": "Alexa.RangeController", "instance": "Blind.Lift",
                        "name": name, "payloadVersion": "3",
                        "messageId": "msg-1", "correlationToken": "ct-1"},
-            "endpoint": {"endpointId": endpoint_id},
+            "endpoint": {"endpointId": endpoint_id, "scope": _scope()},
             "payload": payload,
         }
     }
@@ -85,10 +100,28 @@ def _report_state_event(endpoint_id):
         "directive": {
             "header": {"namespace": "Alexa", "name": "ReportState",
                        "payloadVersion": "3", "messageId": "msg-1", "correlationToken": "ct-1"},
-            "endpoint": {"endpointId": endpoint_id},
+            "endpoint": {"endpointId": endpoint_id, "scope": _scope()},
             "payload": {},
         }
     }
+
+
+# ---------------------------------------------------------------------------
+# Ginaite refresh token extraction (account linking JWT)
+# ---------------------------------------------------------------------------
+
+def test_ginaite_refresh_from_discovery_event():
+    assert handler._ginaite_refresh(_discovery_event()) == MOCK_GINAITE_REFRESH
+
+
+def test_ginaite_refresh_from_control_event():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    assert handler._ginaite_refresh(_power_event("TurnOff", endpoint_id)) == MOCK_GINAITE_REFRESH
+
+
+def test_ginaite_refresh_from_report_state_event():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    assert handler._ginaite_refresh(_report_state_event(endpoint_id)) == MOCK_GINAITE_REFRESH
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +312,8 @@ def test_report_state_unavailable():
 # ---------------------------------------------------------------------------
 
 def test_discovery_filters_non_shutters():
-    with patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Kujawska", MOCK_TOKEN)]), \
+    with patch.object(handler, "_ginaite_refresh", return_value=MOCK_GINAITE_REFRESH), \
+         patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Kujawska", MOCK_TOKEN)]), \
          patch("somfy.get_setup", return_value=MOCK_SETUP):
         resp = handler.handle_discovery(_discovery_event())
     endpoints = resp["event"]["payload"]["endpoints"]
@@ -287,7 +321,8 @@ def test_discovery_filters_non_shutters():
 
 
 def test_discovery_friendly_name_ascii_only():
-    with patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Kujawska", MOCK_TOKEN)]), \
+    with patch.object(handler, "_ginaite_refresh", return_value=MOCK_GINAITE_REFRESH), \
+         patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Kujawska", MOCK_TOKEN)]), \
          patch("somfy.get_setup", return_value=MOCK_SETUP):
         resp = handler.handle_discovery(_discovery_event())
     name = resp["event"]["payload"]["endpoints"][0]["friendlyName"]
@@ -295,7 +330,8 @@ def test_discovery_friendly_name_ascii_only():
 
 
 def test_discovery_includes_site_name():
-    with patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Kujawska", MOCK_TOKEN)]), \
+    with patch.object(handler, "_ginaite_refresh", return_value=MOCK_GINAITE_REFRESH), \
+         patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Kujawska", MOCK_TOKEN)]), \
          patch("somfy.get_setup", return_value=MOCK_SETUP):
         resp = handler.handle_discovery(_discovery_event())
     name = resp["event"]["payload"]["endpoints"][0]["friendlyName"]
@@ -303,7 +339,8 @@ def test_discovery_includes_site_name():
 
 
 def test_discovery_assigns_room_from_place_tree():
-    with patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Kujawska", MOCK_TOKEN)]), \
+    with patch.object(handler, "_ginaite_refresh", return_value=MOCK_GINAITE_REFRESH), \
+         patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Kujawska", MOCK_TOKEN)]), \
          patch("somfy.get_setup", return_value=MOCK_SETUP):
         resp = handler.handle_discovery(_discovery_event())
     ep = resp["event"]["payload"]["endpoints"][0]
@@ -313,7 +350,8 @@ def test_discovery_assigns_room_from_place_tree():
 def test_discovery_deduplicates_sites():
     # Simulate BOB returning the same site twice
     duplicate_sites = [(SITE_OID, "Kujawska", MOCK_TOKEN), (SITE_OID, "Kujawska", MOCK_TOKEN)]
-    with patch.object(handler, "_site_tokens", return_value=duplicate_sites), \
+    with patch.object(handler, "_ginaite_refresh", return_value=MOCK_GINAITE_REFRESH), \
+         patch.object(handler, "_site_tokens", return_value=duplicate_sites), \
          patch("somfy.get_setup", return_value=MOCK_SETUP):
         resp = handler.handle_discovery(_discovery_event())
     # Should return 2 endpoints (not 4) — deduplication happens in _site_tokens
@@ -333,7 +371,8 @@ def test_discovery_multi_site():
         return MOCK_SETUP if token == MOCK_TOKEN else setup2
 
     site2_oid = "389ba9eb-28d2-5ed1-80ab-6f0eb4d85728"
-    with patch.object(handler, "_site_tokens", return_value=[
+    with patch.object(handler, "_ginaite_refresh", return_value=MOCK_GINAITE_REFRESH), \
+         patch.object(handler, "_site_tokens", return_value=[
             (SITE_OID, "Kujawska", MOCK_TOKEN),
             (site2_oid, "Antilope", "token2"),
          ]), \

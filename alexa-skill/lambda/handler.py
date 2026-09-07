@@ -17,6 +17,7 @@ import unicodedata
 import urllib.parse
 
 import alexa
+import jwt_util
 import somfy
 
 logger = logging.getLogger()
@@ -50,23 +51,21 @@ def lambda_handler(event, context):
 
 
 # ---------------------------------------------------------------------------
-# Auth
+# Auth — JWT issued by auth proxy, contains Ginaite refresh token
 # ---------------------------------------------------------------------------
 
-def _site_tokens() -> list[tuple[str, str, str]]:
+def _ginaite_refresh(event: dict) -> str:
+    """Decode the JWT the auth proxy issued and return the Ginaite refresh token."""
+    directive = event["directive"]
+    scope = (directive.get("payload", {}).get("scope")
+             or directive.get("endpoint", {}).get("scope", {}))
+    claims = jwt_util.decode(scope["token"], os.environ["JWT_SECRET"])
+    return claims["gr"]
+
+
+def _site_tokens(ginaite_refresh: str) -> list[tuple[str, str, str]]:
     """Return [(site_oid, site_name, scoped_access_token), ...] for all sites."""
-    user = os.environ["SOMFY_USER"]
-    password = os.environ["SOMFY_PASS"]
-
-    sso = somfy._post_form(somfy.SOMFY_SSO_URL, {
-        "grant_type": "password",
-        "client_id": somfy.CLIENT_ID,
-        "client_secret": somfy.CLIENT_SECRET,
-        "username": user,
-        "password": password,
-    })["access_token"]
-
-    ginaite_access, ginaite_refresh = somfy.ginaite_token_from_sso(sso)
+    ginaite_access, new_refresh = somfy.refresh_ginaite(ginaite_refresh)
     sites = somfy.list_sites(ginaite_access)
 
     # BOB sometimes returns the same site multiple times — deduplicate by site_oid
@@ -74,25 +73,13 @@ def _site_tokens() -> list[tuple[str, str, str]]:
     unique = [s for s in sites if not (s["site_oid"] in seen or seen.add(s["site_oid"]))]
 
     return [
-        (s["site_oid"], s["name"], somfy.scoped_token(ginaite_refresh, s["site_oid"]))
+        (s["site_oid"], s["name"], somfy.scoped_token(new_refresh, s["site_oid"]))
         for s in unique
     ]
 
 
-def _site_token(site_oid: str) -> str:
-    """Mint a scoped token for a single known site_oid."""
-    user = os.environ["SOMFY_USER"]
-    password = os.environ["SOMFY_PASS"]
-
-    sso = somfy._post_form(somfy.SOMFY_SSO_URL, {
-        "grant_type": "password",
-        "client_id": somfy.CLIENT_ID,
-        "client_secret": somfy.CLIENT_SECRET,
-        "username": user,
-        "password": password,
-    })["access_token"]
-
-    _, ginaite_refresh = somfy.ginaite_token_from_sso(sso)
+def _site_token(site_oid: str, ginaite_refresh: str) -> str:
+    """Mint a site-scoped Overkiz token for a single known site_oid."""
     return somfy.scoped_token(ginaite_refresh, site_oid)
 
 
@@ -116,7 +103,7 @@ def _decode_endpoint_id(endpoint_id: str) -> tuple[str, str]:
 
 def handle_discovery(event):
     endpoints = []
-    for site_oid, site_name, token in _site_tokens():
+    for site_oid, site_name, token in _site_tokens(_ginaite_refresh(event)):
         setup = somfy.get_setup(token)
         place_map = _build_place_map(setup)
         for device in setup.get("devices", []):
@@ -156,7 +143,7 @@ def handle_power_controller(event):
     directive = event["directive"]
     name = directive["header"]["name"]
     site_oid, device_url = _decode_endpoint_id(directive["endpoint"]["endpointId"])
-    token = _site_token(site_oid)
+    token = _site_token(site_oid, _ginaite_refresh(event))
 
     if name == "TurnOn":
         somfy.set_closure(token, device_url, 0)    # TaHoma 0 = fully open
@@ -176,7 +163,7 @@ def handle_range_controller(event):
     directive = event["directive"]
     name = directive["header"]["name"]
     site_oid, device_url = _decode_endpoint_id(directive["endpoint"]["endpointId"])
-    token = _site_token(site_oid)
+    token = _site_token(site_oid, _ginaite_refresh(event))
 
     if name == "SetRangeValue":
         alexa_value = int(directive["payload"]["rangeValue"])
@@ -201,7 +188,7 @@ def handle_range_controller(event):
 
 def handle_report_state(event):
     site_oid, device_url = _decode_endpoint_id(event["directive"]["endpoint"]["endpointId"])
-    token = _site_token(site_oid)
+    token = _site_token(site_oid, _ginaite_refresh(event))
     closure = somfy.get_closure(token, device_url)
     if closure is None:
         return alexa.state_report(event, 0, available=False)

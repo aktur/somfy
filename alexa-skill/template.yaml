@@ -6,14 +6,11 @@ Description: Somfy TaHoma - Alexa Smart Home Skill (multi-site)
 Parameters:
   AlexaSkillId:
     Type: String
-    Description: "Alexa Skill ID from the Alexa Developer Console (amzn1.ask.skill.XXXX)"
-  SomfyUser:
-    Type: String
-    Description: "Somfy account email"
-  SomfyPass:
+    Description: "Alexa Skill ID (amzn1.ask.skill.XXXX)"
+  JwtSecret:
     Type: String
     NoEcho: true
-    Description: "Somfy account password"
+    Description: "HS256 signing secret shared between the auth proxy and the skill Lambda (run: openssl rand -hex 32)"
 
 Globals:
   Function:
@@ -22,10 +19,24 @@ Globals:
     MemorySize: 128
     Environment:
       Variables:
-        SOMFY_USER: !Ref SomfyUser
-        SOMFY_PASS: !Ref SomfyPass
+        JWT_SECRET: !Ref JwtSecret
+    Tags:
+      project: somfy-alexa-skill
 
 Resources:
+
+  # OAuth2 auth-code proxy — wraps Somfy password grant for Alexa account linking
+  AuthProxyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: somfy-alexa-auth-proxy
+      Handler: auth_proxy.handler
+      CodeUri: lambda/
+      Description: "Alexa account linking: presents Somfy login form, issues JWTs"
+      FunctionUrlConfig:
+        AuthType: NONE
+
+  # Alexa Smart Home skill Lambda
   SomfyAlexaFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -34,7 +45,7 @@ Resources:
       CodeUri: lambda/
       Description: "Handles Alexa Smart Home directives for Somfy TaHoma (multi-site)"
 
-  # Grant Alexa Smart Home permission to invoke this Lambda.
+  # Grant Alexa Smart Home permission to invoke the skill Lambda.
   # Paste the FunctionArn output into the Alexa Skill endpoint configuration.
   AlexaPermission:
     Type: AWS::Lambda::Permission
@@ -45,6 +56,9 @@ Resources:
       EventSourceToken: !Ref AlexaSkillId
 
 Outputs:
+  AuthProxyUrl:
+    Description: "Base URL for Alexa account linking (append /authorize and /token)"
+    Value: !GetAtt AuthProxyFunctionUrl.FunctionUrl
   FunctionArn:
     Description: "Lambda ARN to paste into the Alexa Skill endpoint configuration"
     Value: !GetAtt SomfyAlexaFunction.Arn

@@ -4,7 +4,6 @@ version = 0.1
 stack_name = "somfy-tahoma-app"
 resolve_s3 = true
 s3_prefix = "somfy-tahoma-app"
-region = "eu-west-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 parameter_overrides = "AlexaSkillId=\"amzn1.ask.skill.20f47101-fe6b-432e-a224-816497865d5f\""

@@ -128,9 +128,6 @@ Room-context commands ("Alexa, close the blind" without a name) require the skil
 1. Go to the [Alexa Developer Console](https://developer.amazon.com/alexa/console/ask)
 2. Create a new skill → **Smart Home** → **Start from scratch**
 3. Note the **Skill ID** (`amzn1.ask.skill.XXXX`)
-4. Under **Account Linking**, configure Login with Amazon (LWA):
-   - Create a Security Profile at the Amazon Developer Console
-   - Set the Authorization URI and Access Token URI to Amazon's LWA endpoints
 
 ### 2 — Deploy the Lambda
 
@@ -138,7 +135,7 @@ Room-context commands ("Alexa, close the blind" without a name) require the skil
 cd alexa-skill
 sam build
 sam deploy --guided
-# Enter: AlexaSkillId, SomfyUser, SomfyPass, and the deployment region when prompted
+# Enter: AlexaSkillId and the deployment region when prompted
 ```
 
 `sam deploy --guided` saves answers to `samconfig.toml`. Future deploys:
@@ -151,9 +148,32 @@ sam build && sam deploy
 
 Copy the `FunctionArn` from the SAM deploy output and paste it into the Alexa Developer Console under **Smart Home → Default endpoint**.
 
-### 4 — Discover devices
+### 4 — Configure account linking
 
-In the Alexa app: **Devices → +  → Add Device → Other** or say "Alexa, discover devices".
+Somfy's OAuth2 server does not support third-party redirect URIs, so this project includes its own OAuth2 authorization proxy deployed alongside the skill Lambda. It shows a Somfy login form, authenticates the user via Somfy's password grant, and issues a signed JWT containing the Ginaite refresh token. The skill Lambda decodes that JWT on every invocation.
+
+After `sam deploy` completes, the `AuthProxyUrl` output contains the proxy's base URL (a Lambda Function URL). In the Alexa Developer Console under **Account Linking**:
+
+| Field | Value |
+|-------|-------|
+| Authorization URI | `<AuthProxyUrl>/authorize` |
+| Access Token URI | `<AuthProxyUrl>/token` |
+| Client ID | *(any string, e.g. `somfy-alexa`)* |
+| Client Secret | *(any string — the JWT secret secures tokens, not this)* |
+| Client Authentication Scheme | Credentials in request body |
+| Scope | *(leave empty)* |
+
+Before deploying, generate a `JwtSecret` — a random 32-byte hex string shared between the auth proxy Lambda and the skill Lambda:
+
+```sh
+openssl rand -hex 32
+```
+
+Pass this as the `JwtSecret` parameter during `sam deploy --guided`. Both Lambdas receive it as the `JWT_SECRET` environment variable.
+
+### 5 — Discover devices
+
+In the Alexa app: **Devices → + → Add Device → Other** or say "Alexa, discover devices".
 
 ---
 

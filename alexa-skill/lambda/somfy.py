@@ -68,6 +68,16 @@ def ginaite_token_from_sso(sso_token: str) -> tuple[str, str]:
     return resp["access_token"], resp["refresh_token"]
 
 
+def refresh_ginaite(ginaite_refresh: str) -> tuple[str, str]:
+    """Refresh a Ginaite token. Returns (access_token, refresh_token)."""
+    resp = _post_form(GINAITE_URL, {
+        "grant_type": "refresh_token",
+        "client_id": CLIENT_ID,
+        "refresh_token": ginaite_refresh,
+    })
+    return resp["access_token"], resp["refresh_token"]
+
+
 def scoped_token(ginaite_refresh: str, site_oid: str) -> str:
     """Mint a site-scoped Overkiz token for the given siteOID."""
     resp = _post_form(f"{GINAITE_URL}?siteOID={site_oid}", {
