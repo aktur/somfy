@@ -35,6 +35,8 @@ def handler(event, context):
         return _authorize_submit(event)
     if path == "/token" and method == "POST":
         return _token(event)
+    if path in ("/icon-108.png", "/icon-512.png") and method == "GET":
+        return _serve_icon(path.lstrip("/"))
     return {"statusCode": 404, "body": "Not found"}
 
 
@@ -153,6 +155,22 @@ def _issue_tokens(ginaite_refresh: str, secret: str) -> dict:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _serve_icon(filename: str) -> dict:
+    import os
+    path = os.path.join(os.path.dirname(__file__), filename)
+    with open(path, "rb") as f:
+        data = base64.b64encode(f.read()).decode()
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "image/png",
+            "Cache-Control": "public, max-age=31536000",
+        },
+        "body": data,
+        "isBase64Encoded": True,
+    }
+
 
 def _parse_body(event) -> dict:
     body = event.get("body") or ""

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <!-- Background: deep navy rounded square -->
+  <rect width="108" height="108" rx="16" fill="#0D1B2A"/>
+
+  <!-- Roller shutter housing (top bar) -->
+  <rect x="22" y="20" width="64" height="9" rx="3" fill="#FFFFFF"/>
+
+  <!-- Shutter slats — progressively lighter to suggest depth/motion -->
+  <rect x="22" y="32" width="64" height="7" rx="1.5" fill="#FFFFFF" opacity="1"/>
+  <rect x="22" y="42" width="64" height="7" rx="1.5" fill="#FFFFFF" opacity="0.88"/>
+  <rect x="22" y="52" width="64" height="7" rx="1.5" fill="#FFFFFF" opacity="0.72"/>
+  <rect x="22" y="62" width="64" height="7" rx="1.5" fill="#FFFFFF" opacity="0.52"/>
+
+  <!-- Partial open gap below last slat -->
+  <rect x="22" y="72" width="64" height="2" rx="1" fill="#1E90FF" opacity="0.5"/>
+
+  <!-- Alexa-blue arc — voice/smart home indicator -->
+  <path d="M 36 88 A 18 18 0 0 1 72 88" stroke="#1E90FF" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <circle cx="54" cy="88" r="3.5" fill="#1E90FF"/>
+</svg>
