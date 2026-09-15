@@ -24,6 +24,9 @@ CLIENT_ID = (
 CLIENT_SECRET = "12k73w1n540g8o4cokg0cw84cog840k84cwggscwg884004kgk"
 
 ROLLER_SHUTTER_TYPE = "RollerShutter"
+AWNING_TYPE = "Awning"
+
+_SUPPORTED_TYPES = (ROLLER_SHUTTER_TYPE, AWNING_TYPE)
 
 
 def _post_form(url: str, fields: dict) -> dict:
@@ -131,11 +134,13 @@ def get_closure(site_token: str, device_url: str) -> int | None:
     devices = get_devices(site_token)
     for dev in devices:
         if dev["deviceURL"] == device_url:
-            for state in dev.get("states", []):
-                if state["name"] == "core:ClosureState":
-                    return int(state["value"])
+            states = {s["name"]: s["value"] for s in dev.get("states", [])}
+            for key in ("core:ClosureState", "core:TargetClosureState"):
+                if key in states:
+                    return int(states[key])
     return None
 
 
-def is_roller_shutter(device: dict) -> bool:
-    return ROLLER_SHUTTER_TYPE in device.get("controllableName", "")
+def is_supported_device(device: dict) -> bool:
+    name = device.get("controllableName", "")
+    return any(t in name for t in _SUPPORTED_TYPES)

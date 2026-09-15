@@ -37,6 +37,18 @@ MOCK_SETUP = {
             "controllableName": "homekit:StackComponent",
             "states": [],
         },
+        {
+            "deviceURL": "io://XXXX-XXXX-XXXX/11111111",
+            "label": "Sunscreen",
+            "controllableName": "io:HorizontalAwningIOComponent",
+            "states": [],
+        },
+        {
+            "deviceURL": "io://XXXX-XXXX-XXXX/22222222",
+            "label": "Woonkamer",
+            "controllableName": "io:VerticalExteriorAwningIOComponent",
+            "states": [],
+        },
     ],
     "rootPlace": {
         "label": "Home",
@@ -317,7 +329,7 @@ def test_discovery_filters_non_shutters():
          patch("somfy.get_setup", return_value=MOCK_SETUP):
         resp = handler.handle_discovery(_discovery_event())
     endpoints = resp["event"]["payload"]["endpoints"]
-    assert len(endpoints) == 1  # only the roller shutter, not the homekit stack
+    assert len(endpoints) == 3  # roller shutter + 2 awnings, not the homekit stack
 
 
 def test_discovery_friendly_name_ascii_only():
@@ -356,7 +368,7 @@ def test_discovery_deduplicates_sites():
         resp = handler.handle_discovery(_discovery_event())
     # Should return 2 endpoints (not 4) — deduplication happens in _site_tokens
     endpoints = resp["event"]["payload"]["endpoints"]
-    assert len(endpoints) == 2  # 2 calls × 1 shutter each (duplicate sites passed through)
+    assert len(endpoints) == 6  # 2 calls × 3 devices each (duplicate sites passed through)
 
 
 def test_discovery_multi_site():
@@ -379,7 +391,7 @@ def test_discovery_multi_site():
          patch("somfy.get_setup", side_effect=get_setup_side_effect):
         resp = handler.handle_discovery(_discovery_event())
     endpoints = resp["event"]["payload"]["endpoints"]
-    assert len(endpoints) == 2
+    assert len(endpoints) == 4  # site1: 3 devices, site2: 1 device
     site_names = {ep["friendlyName"].split(" - ")[0] for ep in endpoints}
     assert "Kujawska" in site_names
     assert "Antilope" in site_names

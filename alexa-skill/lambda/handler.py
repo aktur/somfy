@@ -11,6 +11,7 @@ Directive routing:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import unicodedata
@@ -29,6 +30,9 @@ def _to_ascii(text: str) -> str:
 
 
 def lambda_handler(event, context):
+
+    print(json.dumps(event))
+
     namespace = event["directive"]["header"]["namespace"]
     name = event["directive"]["header"].get("name", "")
 
@@ -107,7 +111,7 @@ def handle_discovery(event):
         setup = somfy.get_setup(token)
         place_map = _build_place_map(setup)
         for device in setup.get("devices", []):
-            if not somfy.is_roller_shutter(device):
+            if not somfy.is_supported_device(device):
                 continue
             device_url = device["deviceURL"]
             label = device.get("label") or device_url

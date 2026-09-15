@@ -1,5 +1,5 @@
-env.sh
-device-names.json
+env*.sh
+device-names*.json
 .aws-sam/
 alexa-skill/.venv/
 alexa-skill/.pytest_cache/
