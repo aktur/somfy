@@ -118,7 +118,8 @@ def handle_discovery(event):
             friendly_name = _to_ascii(f"{site_name} - {label}")
             room = place_map.get(device_url)
             endpoint_id = _encode_endpoint_id(site_oid, device_url)
-            endpoints.append(alexa._endpoint(endpoint_id, friendly_name, room))
+            cookie = {"low_speed": "1"} if somfy.supports_low_speed(device) else None
+            endpoints.append(alexa._endpoint(endpoint_id, friendly_name, room, cookie=cookie))
 
     return alexa.discovery_response(endpoints)
 
@@ -140,6 +141,18 @@ def _walk_places(place: dict, room_name: str | None, result: dict):
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _do_set_closure(token: str, device_url: str, closure: int, endpoint: dict) -> None:
+    """Send setClosure or setClosureAndLinearSpeed depending on endpoint capability."""
+    if endpoint.get("cookie", {}).get("low_speed") == "1":
+        somfy.set_closure_low_speed(token, device_url, closure)
+    else:
+        somfy.set_closure(token, device_url, closure)
+
+
+# ---------------------------------------------------------------------------
 # PowerController  (open = TurnOn, close = TurnOff)
 # ---------------------------------------------------------------------------
 
@@ -150,10 +163,10 @@ def handle_power_controller(event):
     token = _site_token(site_oid, _ginaite_refresh(event))
 
     if name == "TurnOn":
-        somfy.set_closure(token, device_url, 0)    # TaHoma 0 = fully open
+        _do_set_closure(token, device_url, 0, directive["endpoint"])
         return alexa.power_response(event, "ON")
     if name == "TurnOff":
-        somfy.set_closure(token, device_url, 100)  # TaHoma 100 = fully closed
+        _do_set_closure(token, device_url, 100, directive["endpoint"])
         return alexa.power_response(event, "OFF")
 
     return alexa.error_response(event, "INVALID_DIRECTIVE", f"Unknown PowerController: {name}")
@@ -171,7 +184,7 @@ def handle_range_controller(event):
 
     if name == "SetRangeValue":
         alexa_value = int(directive["payload"]["rangeValue"])
-        somfy.set_closure(token, device_url, 100 - alexa_value)
+        _do_set_closure(token, device_url, 100 - alexa_value, directive["endpoint"])
         return alexa.range_response(event, alexa_value)
 
     if name == "AdjustRangeValue":
@@ -180,7 +193,7 @@ def handle_range_controller(event):
         if current is None:
             return alexa.error_response(event, "ENDPOINT_UNREACHABLE", "Could not read device state")
         new_alexa = max(0, min(100, (100 - current) + delta))
-        somfy.set_closure(token, device_url, 100 - new_alexa)
+        _do_set_closure(token, device_url, 100 - new_alexa, directive["endpoint"])
         return alexa.range_response(event, new_alexa)
 
     return alexa.error_response(event, "INVALID_DIRECTIVE", f"Unknown RangeController: {name}")

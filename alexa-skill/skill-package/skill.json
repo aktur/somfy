@@ -24,10 +24,6 @@
         "en-GB": {
           "privacyPolicyUrl": "https://norg3ewb64xdnawqnht3hayrqm0axoni.lambda-url.eu-west-1.on.aws/privacy",
           "termsOfUseUrl": "https://norg3ewb64xdnawqnht3hayrqm0axoni.lambda-url.eu-west-1.on.aws/terms"
-        },
-        "nl-NL": {
-          "privacyPolicyUrl": "https://norg3ewb64xdnawqnht3hayrqm0axoni.lambda-url.eu-west-1.on.aws/privacy",
-          "termsOfUseUrl": "https://norg3ewb64xdnawqnht3hayrqm0axoni.lambda-url.eu-west-1.on.aws/terms"
         }
       }
     },
@@ -55,7 +51,7 @@
             "Somfy", "TaHoma", "roller", "shutter", "blind",
             "smart", "home", "multi-site", "automation", "Overkiz"
           ],
-          "updatesDescription": "Added UK/IE and NL languages."
+          "updatesDescription": "Added Discreet mode when available."
         },
         "en-GB": {
           "name": "Multisite TaHoma",
@@ -72,23 +68,7 @@
             "Somfy", "TaHoma", "roller", "shutter", "blind",
             "smart", "home", "multi-site", "automation", "Overkiz"
           ],
-          "updatesDescription": "Added UK/IE and NL languages."
-        },
-        "nl-NL": {
-          "name": "Multisite TaHoma",
-          "smallIconUri": "https://norg3ewb64xdnawqnht3hayrqm0axoni.lambda-url.eu-west-1.on.aws/icon-108.png",
-          "largeIconUri": "https://norg3ewb64xdnawqnht3hayrqm0axoni.lambda-url.eu-west-1.on.aws/icon-512.png",
-          "summary": "Bedien Somfy TaHoma rolluiken en zonwering op meerdere locaties.",
-          "description": "Breidt de officiële TaHoma-skill uit met ondersteuning voor meerdere Somfy-installaties (bijv. thuis en vakantiewoning). Ontdek en bedien alle rolluiken en zonwering per kamer op al uw locaties. Koppel uw Somfy-account via accountkoppeling en zeg 'Alexa, ontdek apparaten' om alle rolluiken van al uw TaHoma-installaties te importeren.",
-          "examplePhrases": [
-            "Alexa, open het balkonrolluik.",
-            "Alexa, sluit het balkonrolluik.",
-            "Alexa, zet het balkonrolluik op vijftig procent."
-          ],
-          "keywords": [
-            "somfy", "tahoma", "rolluik", "zonwering", "jaloezie"
-          ],
-          "updatesDescription": "Added NL support."
+          "updatesDescription": "Added Discreet mode when available."
         }
       }
     }

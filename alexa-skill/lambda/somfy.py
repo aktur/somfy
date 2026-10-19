@@ -129,6 +129,18 @@ def set_closure(site_token: str, device_url: str, closure: int) -> dict:
     return send_command(site_token, device_url, "setClosure", [closure])
 
 
+def set_closure_low_speed(site_token: str, device_url: str, closure: int) -> dict:
+    """Set closure at low (discreet) speed. closure: 0 (open) … 100 (closed)."""
+    return send_command(site_token, device_url, "setClosureAndLinearSpeed", [closure, "lowspeed"])
+
+
+def supports_low_speed(device: dict) -> bool:
+    """Return True if the device supports setClosureAndLinearSpeed."""
+    return "setClosureAndLinearSpeed" in [
+        c["commandName"] for c in device.get("definition", {}).get("commands", [])
+    ]
+
+
 def get_closure(site_token: str, device_url: str) -> int | None:
     """Return current closure percentage, or None if unavailable."""
     devices = get_devices(site_token)

@@ -23,6 +23,7 @@ def _endpoint(
     label: str,
     room: str | None,
     description: str = "Somfy TaHoma Roller Shutter",
+    cookie: dict[str, str] | None = None,
 ) -> dict:
     ep = {
         "endpointId": endpoint_id,
@@ -120,6 +121,8 @@ def _endpoint(
     }
     if room:
         ep["additionalAttributes"] = {"room": room}
+    if cookie:
+        ep["cookie"] = cookie
     return ep
 
 
