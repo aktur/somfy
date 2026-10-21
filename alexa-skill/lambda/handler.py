@@ -18,6 +18,7 @@ import unicodedata
 import urllib.parse
 
 import alexa
+import calibration
 import jwt_util
 import somfy
 
@@ -163,9 +164,13 @@ def handle_power_controller(event):
     token = _site_token(site_oid, _ginaite_refresh(event))
 
     if name == "TurnOn":
+        if somfy.get_closure(token, device_url) is None:
+            return alexa.error_response(event, "ENDPOINT_UNREACHABLE", "Could not read device state")
         _do_set_closure(token, device_url, 0, directive["endpoint"])
         return alexa.power_response(event, "ON")
     if name == "TurnOff":
+        if somfy.get_closure(token, device_url) is None:
+            return alexa.error_response(event, "ENDPOINT_UNREACHABLE", "Could not read device state")
         _do_set_closure(token, device_url, 100, directive["endpoint"])
         return alexa.power_response(event, "OFF")
 
@@ -183,18 +188,23 @@ def handle_range_controller(event):
     token = _site_token(site_oid, _ginaite_refresh(event))
 
     if name == "SetRangeValue":
+        if somfy.get_closure(token, device_url) is None:
+            return alexa.error_response(event, "ENDPOINT_UNREACHABLE", "Could not read device state")
         alexa_value = int(directive["payload"]["rangeValue"])
-        _do_set_closure(token, device_url, 100 - alexa_value, directive["endpoint"])
+        motor_pct = calibration.physical_to_motor(device_url, alexa_value)
+        _do_set_closure(token, device_url, 100 - motor_pct, directive["endpoint"])
         return alexa.range_response(event, alexa_value)
 
     if name == "AdjustRangeValue":
         delta = int(directive["payload"]["rangeValueDelta"])
-        current = somfy.get_closure(token, device_url)
-        if current is None:
+        current_closure = somfy.get_closure(token, device_url)
+        if current_closure is None:
             return alexa.error_response(event, "ENDPOINT_UNREACHABLE", "Could not read device state")
-        new_alexa = max(0, min(100, (100 - current) + delta))
-        _do_set_closure(token, device_url, 100 - new_alexa, directive["endpoint"])
-        return alexa.range_response(event, new_alexa)
+        current_physical = calibration.motor_to_physical(device_url, 100 - current_closure)
+        new_physical = max(0, min(100, current_physical + delta))
+        new_motor = calibration.physical_to_motor(device_url, new_physical)
+        _do_set_closure(token, device_url, 100 - new_motor, directive["endpoint"])
+        return alexa.range_response(event, new_physical)
 
     return alexa.error_response(event, "INVALID_DIRECTIVE", f"Unknown RangeController: {name}")
 
@@ -209,4 +219,5 @@ def handle_report_state(event):
     closure = somfy.get_closure(token, device_url)
     if closure is None:
         return alexa.state_report(event, 0, available=False)
-    return alexa.state_report(event, 100 - closure)
+    physical = calibration.motor_to_physical(device_url, 100 - closure)
+    return alexa.state_report(event, physical)

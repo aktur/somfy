@@ -142,11 +142,14 @@ def supports_low_speed(device: dict) -> bool:
 
 
 def get_closure(site_token: str, device_url: str) -> int | None:
-    """Return current closure percentage, or None if unavailable."""
+    """Return current closure percentage, or None if unavailable or offline."""
     devices = get_devices(site_token)
     for dev in devices:
         if dev["deviceURL"] == device_url:
             states = {s["name"]: s["value"] for s in dev.get("states", [])}
+            print(f"[somfy] get_closure states for {device_url}: {states}")
+            if states.get("core:StatusState") == "unavailable":
+                return None
             for key in ("core:ClosureState", "core:TargetClosureState"):
                 if key in states:
                     return int(states[key])

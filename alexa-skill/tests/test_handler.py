@@ -3,6 +3,7 @@
 import time
 from unittest.mock import patch
 
+import calibration
 import handler
 import jwt_util
 
@@ -180,6 +181,7 @@ def test_to_ascii_em_dash_removed():
 def test_turn_off_sends_closure_100():
     endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
     with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_closure", return_value=50), \
          patch("somfy.set_closure") as mock_set:
         resp = handler.handle_power_controller(_power_event("TurnOff", endpoint_id))
     mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 100)
@@ -189,6 +191,7 @@ def test_turn_off_sends_closure_100():
 def test_turn_on_sends_closure_0():
     endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
     with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_closure", return_value=50), \
          patch("somfy.set_closure") as mock_set:
         handler.handle_power_controller(_power_event("TurnOn", endpoint_id))
     mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 0)
@@ -197,10 +200,22 @@ def test_turn_on_sends_closure_0():
 def test_power_response_includes_range_value():
     endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
     with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_closure", return_value=50), \
          patch("somfy.set_closure"):
         resp = handler.handle_power_controller(_power_event("TurnOff", endpoint_id))
     props = {p["namespace"]: p for p in resp["context"]["properties"]}
     assert props["Alexa.RangeController"]["value"] == 0
+
+
+def test_power_controller_offline_returns_unreachable():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_closure", return_value=None), \
+         patch("somfy.set_closure") as mock_set:
+        resp = handler.handle_power_controller(_power_event("TurnOn", endpoint_id))
+    mock_set.assert_not_called()
+    assert resp["event"]["header"]["name"] == "ErrorResponse"
+    assert resp["event"]["payload"]["type"] == "ENDPOINT_UNREACHABLE"
 
 
 def test_unknown_power_directive_returns_error():
@@ -217,6 +232,7 @@ def test_unknown_power_directive_returns_error():
 def test_set_range_100_sends_closure_0():
     endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
     with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_closure", return_value=50), \
          patch("somfy.set_closure") as mock_set:
         handler.handle_range_controller(_range_event("SetRangeValue", endpoint_id, {"rangeValue": 100}))
     mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 0)
@@ -225,6 +241,7 @@ def test_set_range_100_sends_closure_0():
 def test_set_range_0_sends_closure_100():
     endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
     with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_closure", return_value=50), \
          patch("somfy.set_closure") as mock_set:
         handler.handle_range_controller(_range_event("SetRangeValue", endpoint_id, {"rangeValue": 0}))
     mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 100)
@@ -233,6 +250,7 @@ def test_set_range_0_sends_closure_100():
 def test_set_range_75_sends_closure_25():
     endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
     with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_closure", return_value=50), \
          patch("somfy.set_closure") as mock_set:
         handler.handle_range_controller(_range_event("SetRangeValue", endpoint_id, {"rangeValue": 75}))
     mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 25)
@@ -272,6 +290,19 @@ def test_adjust_range_clamps_at_100():
             _range_event("AdjustRangeValue", endpoint_id, {"rangeValueDelta": 999})
         )
     mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 0)
+
+
+def test_set_range_offline_returns_unreachable():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_closure", return_value=None), \
+         patch("somfy.set_closure") as mock_set:
+        resp = handler.handle_range_controller(
+            _range_event("SetRangeValue", endpoint_id, {"rangeValue": 50})
+        )
+    mock_set.assert_not_called()
+    assert resp["event"]["header"]["name"] == "ErrorResponse"
+    assert resp["event"]["payload"]["type"] == "ENDPOINT_UNREACHABLE"
 
 
 def test_adjust_range_unavailable_returns_error():
@@ -443,3 +474,230 @@ def test_lambda_handles_exception_gracefully():
     assert resp["event"]["header"]["name"] == "ErrorResponse"
     assert resp["event"]["payload"]["type"] == "INTERNAL_ERROR"
     assert "boom" in resp["event"]["payload"]["message"]
+
+
+# ---------------------------------------------------------------------------
+# Calibration integration — SetRangeValue (absolute command)
+# ---------------------------------------------------------------------------
+#
+# SIMPLE_POINTS: physical → motor: 0→0, 50→80, 100→100
+#   physical=50 → motor=80 → TaHoma closure=20
+#   physical=75 → motor=90 → TaHoma closure=10
+
+_CAL_SIMPLE = [
+    {"physical": 0, "motor": 0},
+    {"physical": 50, "motor": 80},
+    {"physical": 100, "motor": 100},
+]
+_CAL_CFG = {"shutters": {DEVICE_URL: {"calibration": _CAL_SIMPLE}}}
+
+
+def test_set_range_calibration_maps_physical_to_motor():
+    # Alexa asks for 50% open (physical). Calibration maps that to motor=80.
+    # TaHoma closure = 100 - 80 = 20.
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=50), \
+         patch("somfy.set_closure") as mock_set:
+        resp = handler.handle_range_controller(
+            _range_event("SetRangeValue", endpoint_id, {"rangeValue": 50})
+        )
+    mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 20)
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.RangeController"]["value"] == 50  # reports requested physical %
+
+
+def test_set_range_calibration_at_75():
+    # physical=75 → motor=90 → closure=10
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=50), \
+         patch("somfy.set_closure") as mock_set:
+        handler.handle_range_controller(
+            _range_event("SetRangeValue", endpoint_id, {"rangeValue": 75})
+        )
+    mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 10)
+
+
+def test_set_range_calibration_fully_open():
+    # physical=100 → motor=100 → closure=0
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=50), \
+         patch("somfy.set_closure") as mock_set:
+        handler.handle_range_controller(
+            _range_event("SetRangeValue", endpoint_id, {"rangeValue": 100})
+        )
+    mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 0)
+
+
+def test_set_range_calibration_fully_closed():
+    # physical=0 → motor=0 → closure=100
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=50), \
+         patch("somfy.set_closure") as mock_set:
+        handler.handle_range_controller(
+            _range_event("SetRangeValue", endpoint_id, {"rangeValue": 0})
+        )
+    mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 100)
+
+
+# ---------------------------------------------------------------------------
+# Calibration integration — AdjustRangeValue (relative command)
+# ---------------------------------------------------------------------------
+#
+# Relative adjustments operate on physical space, not raw motor space.
+# TaHoma reports closure=20 → motor_pct=80 → physical=50.
+# delta=+25 → new_physical=75 → motor=90 → closure=10.
+
+def test_adjust_range_calibration_delta_on_physical_space():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=20), \
+         patch("somfy.set_closure") as mock_set:
+        resp = handler.handle_range_controller(
+            _range_event("AdjustRangeValue", endpoint_id, {"rangeValueDelta": 25})
+        )
+    mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 10)
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.RangeController"]["value"] == 75  # physical %
+
+
+def test_adjust_range_calibration_clamps_at_100():
+    # physical=50, delta=+9999 → new_physical=100 → motor=100 → closure=0
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=20), \
+         patch("somfy.set_closure") as mock_set:
+        resp = handler.handle_range_controller(
+            _range_event("AdjustRangeValue", endpoint_id, {"rangeValueDelta": 9999})
+        )
+    mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 0)
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.RangeController"]["value"] == 100
+
+
+def test_adjust_range_calibration_clamps_at_0():
+    # physical=50, delta=-9999 → new_physical=0 → motor=0 → closure=100
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=20), \
+         patch("somfy.set_closure") as mock_set:
+        resp = handler.handle_range_controller(
+            _range_event("AdjustRangeValue", endpoint_id, {"rangeValueDelta": -9999})
+        )
+    mock_set.assert_called_once_with(MOCK_TOKEN, DEVICE_URL, 100)
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.RangeController"]["value"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Calibration integration — ReportState (state query)
+# ---------------------------------------------------------------------------
+#
+# TaHoma reports closure=20 → motor_pct=80 → physical=50 via inverse calibration.
+# Alexa should see 50%, not the raw 80%.
+
+def test_report_state_calibration_inverts_motor_to_physical():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=20):
+        resp = handler.handle_report_state(_report_state_event(endpoint_id))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.RangeController"]["value"] == 50
+
+
+def test_report_state_calibration_fully_open():
+    # closure=0 → motor_pct=100 → physical=100
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=0):
+        resp = handler.handle_report_state(_report_state_event(endpoint_id))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.RangeController"]["value"] == 100
+    assert props["Alexa.PowerController"]["value"] == "ON"
+
+
+def test_report_state_calibration_fully_closed():
+    # closure=100 → motor_pct=0 → physical=0
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=100):
+        resp = handler.handle_report_state(_report_state_event(endpoint_id))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.RangeController"]["value"] == 0
+    assert props["Alexa.PowerController"]["value"] == "OFF"
+
+
+# ---------------------------------------------------------------------------
+# No double-calibration: raw TaHoma closure → single inverse → physical
+# ---------------------------------------------------------------------------
+#
+# Verify that calibration.motor_to_physical is called exactly once per
+# state report, not multiple times (which would double-apply the curve).
+
+def test_report_state_no_double_calibration():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_closure", return_value=20), \
+         patch.object(calibration, "motor_to_physical", return_value=50) as mock_m2p, \
+         patch.object(calibration, "physical_to_motor") as mock_p2m:
+        handler.handle_report_state(_report_state_event(endpoint_id))
+    mock_m2p.assert_called_once()
+    mock_p2m.assert_not_called()
+
+
+def test_set_range_no_double_calibration():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_closure", return_value=50), \
+         patch("somfy.set_closure"), \
+         patch.object(calibration, "physical_to_motor", return_value=80) as mock_p2m, \
+         patch.object(calibration, "motor_to_physical") as mock_m2p:
+        handler.handle_range_controller(
+            _range_event("SetRangeValue", endpoint_id, {"rangeValue": 50})
+        )
+    mock_p2m.assert_called_once_with(DEVICE_URL, 50)
+    mock_m2p.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Direction convention: Alexa open=100, TaHoma closure=0 — preserved with calibration
+# ---------------------------------------------------------------------------
+
+def test_direction_alexa_100_maps_to_tahoma_closure_0_with_calibration():
+    # With any calibration curve that preserves endpoints, Alexa 100 must → closure 0.
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=50), \
+         patch("somfy.set_closure") as mock_set:
+        handler.handle_range_controller(
+            _range_event("SetRangeValue", endpoint_id, {"rangeValue": 100})
+        )
+    closure = mock_set.call_args[0][2]
+    assert closure == 0
+
+
+def test_direction_alexa_0_maps_to_tahoma_closure_100_with_calibration():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value=_CAL_CFG), \
+         patch("somfy.get_closure", return_value=50), \
+         patch("somfy.set_closure") as mock_set:
+        handler.handle_range_controller(
+            _range_event("SetRangeValue", endpoint_id, {"rangeValue": 0})
+        )
+    closure = mock_set.call_args[0][2]
+    assert closure == 100
