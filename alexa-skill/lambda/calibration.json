@@ -1,47 +1,7 @@
 {
   "shutters": {
-    "io://2329-9527-8057/943389": {
-      "name": "Roleta kuchenna",
-      "calibration": [
-        { "physical": 0, "motor": 0 },
-        { "physical": 25, "motor": 46 },
-        { "physical": 50, "motor": 68 },
-        { "physical": 75, "motor": 85 },
-        { "physical": 100, "motor": 100 }
-      ]
-    },
-    "io://2329-9527-8057/13387958": {
-      "name": "Roleta dużego pokoju",
-      "calibration": [
-        { "physical": 0, "motor": 0 },
-        { "physical": 25, "motor": 46 },
-        { "physical": 50, "motor": 68 },
-        { "physical": 75, "motor": 85 },
-        { "physical": 100, "motor": 100 }
-      ]
-    },
-    "io://2329-9527-8057/13815243": {
-      "name": "Roleta balkonowa",
-      "calibration": [
-        { "physical": 0, "motor": 0 },
-        { "physical": 25, "motor": 46 },
-        { "physical": 50, "motor": 68 },
-        { "physical": 75, "motor": 85 },
-        { "physical": 100, "motor": 100 }
-      ]
-    },
-    "io://2329-9527-8057/14866336": {
-      "name": "Roleta pokoju gościnnego",
-      "calibration": [
-        { "physical": 0, "motor": 0 },
-        { "physical": 25, "motor": 46 },
-        { "physical": 50, "motor": 68 },
-        { "physical": 75, "motor": 85 },
-        { "physical": 100, "motor": 100 }
-      ]
-    },
-    "io://2329-9527-8057/11160580": {
-      "name": "Roleta sypialni",
+    "*": {
+      "name": "Default (all Kujawska shutters — Somfy RS100 io)",
       "calibration": [
         { "physical": 0, "motor": 0 },
         { "physical": 25, "motor": 46 },

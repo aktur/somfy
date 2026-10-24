@@ -310,6 +310,55 @@ class TestValidation:
 
 
 # ---------------------------------------------------------------------------
+# Wildcard fallback ('*' key)
+# ---------------------------------------------------------------------------
+
+class TestWildcard:
+    OVERRIDE_POINTS = [
+        {"physical": 0, "motor": 0},
+        {"physical": 50, "motor": 60},
+        {"physical": 100, "motor": 100},
+    ]
+
+    def test_wildcard_used_when_no_exact_match(self):
+        cfg = _cfg({"*": {"calibration": SIMPLE_POINTS}})
+        with patch.object(calibration, "_load_config", return_value=cfg):
+            assert calibration.physical_to_motor(DEVICE_A, 50) == 80
+
+    def test_exact_match_overrides_wildcard(self):
+        cfg = _cfg({
+            "*": {"calibration": SIMPLE_POINTS},          # 50 → 80
+            DEVICE_A: {"calibration": self.OVERRIDE_POINTS},  # 50 → 60
+        })
+        with patch.object(calibration, "_load_config", return_value=cfg):
+            assert calibration.physical_to_motor(DEVICE_A, 50) == 60
+
+    def test_other_device_falls_back_to_wildcard(self):
+        cfg = _cfg({
+            "*": {"calibration": SIMPLE_POINTS},
+            DEVICE_A: {"calibration": self.OVERRIDE_POINTS},
+        })
+        with patch.object(calibration, "_load_config", return_value=cfg):
+            assert calibration.physical_to_motor(DEVICE_B, 50) == 80
+
+    def test_no_wildcard_no_exact_match_gives_identity(self):
+        cfg = _cfg({DEVICE_A: {"calibration": SIMPLE_POINTS}})
+        with patch.object(calibration, "_load_config", return_value=cfg):
+            assert calibration.physical_to_motor(DEVICE_B, 50) == 50
+
+    def test_wildcard_inverse_mapping(self):
+        cfg = _cfg({"*": {"calibration": SIMPLE_POINTS}})
+        with patch.object(calibration, "_load_config", return_value=cfg):
+            assert calibration.motor_to_physical(DEVICE_A, 80) == 50
+
+    def test_wildcard_forward_and_inverse_device_b(self):
+        cfg = _cfg({"*": {"calibration": SIMPLE_POINTS}})
+        with patch.object(calibration, "_load_config", return_value=cfg):
+            assert calibration.physical_to_motor(DEVICE_B, 25) == 40
+            assert calibration.motor_to_physical(DEVICE_B, 40) == 25
+
+
+# ---------------------------------------------------------------------------
 # Multi-point curve (5 points, matches task example shape)
 # ---------------------------------------------------------------------------
 

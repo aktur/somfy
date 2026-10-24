@@ -250,6 +250,7 @@ def test_set_range_0_sends_closure_100():
 def test_set_range_75_sends_closure_25():
     endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
     with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value={"shutters": {}}), \
          patch("somfy.get_closure", return_value=50), \
          patch("somfy.set_closure") as mock_set:
         handler.handle_range_controller(_range_event("SetRangeValue", endpoint_id, {"rangeValue": 75}))
@@ -260,6 +261,7 @@ def test_adjust_range_applies_delta():
     # TaHoma closure=20 → Alexa=80, delta=-25 → new Alexa=55, TaHoma=45
     endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
     with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value={"shutters": {}}), \
          patch("somfy.get_closure", return_value=20), \
          patch("somfy.set_closure") as mock_set:
         resp = handler.handle_range_controller(
@@ -321,9 +323,10 @@ def test_adjust_range_unavailable_returns_error():
 # ---------------------------------------------------------------------------
 
 def test_report_state_converts_closure():
-    # TaHoma closure=30 → Alexa rangeValue=70
+    # TaHoma closure=30 → Alexa rangeValue=70 (identity mapping, no calibration)
     endpoint_id = handler._encode_endpoint_id(SITE_OID, DEVICE_URL)
     with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch.object(calibration, "_load_config", return_value={"shutters": {}}), \
          patch("somfy.get_closure", return_value=30):
         resp = handler.handle_report_state(_report_state_event(endpoint_id))
     assert resp["event"]["header"]["name"] == "StateReport"

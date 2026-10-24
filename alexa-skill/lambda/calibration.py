@@ -28,9 +28,15 @@ def _load_config() -> dict:
 
 
 def _get_calibration(device_url: str) -> list[dict] | None:
-    """Return validated calibration points for a device, or None for identity mapping."""
+    """Return validated calibration points for a device, or None for identity mapping.
+
+    Lookup order: exact device_url match, then '*' wildcard, then identity.
+    """
     config = _load_config()
-    shutter = config.get("shutters", {}).get(device_url)
+    shutters = config.get("shutters", {})
+    shutter = shutters.get(device_url)
+    if shutter is None:
+        shutter = shutters.get("*")
     if not shutter:
         return None
     points = shutter.get("calibration")
