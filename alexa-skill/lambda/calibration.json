@@ -1,5 +1,15 @@
 {
   "shutters": {
+    "io://2027-1886-8813/827719": {
+      "name": "Sunscreen (identity — no calibration)",
+      "calibration": [
+        { "physical": 0, "motor": 0 },
+        { "physical": 25, "motor": 25 },
+        { "physical": 50, "motor": 50 },
+        { "physical": 75, "motor": 75 },
+        { "physical": 100, "motor": 100 }
+      ]
+    },
     "*": {
       "name": "Default (all Kujawska shutters — Somfy RS100 io)",
       "calibration": [
