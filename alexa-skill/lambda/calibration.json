@@ -1,5 +1,13 @@
 {
   "shutters": {
+    "io://2027-1886-8813/8747173": {
+      "name": "Woonkamer blind",
+      "calibration": [
+        { "physical": 0, "motor": 0 },
+        { "physical": 50, "motor": 54 },
+        { "physical": 100, "motor": 100 }
+      ]
+    },
     "io://2027-1886-8813/827719": {
       "name": "Sunscreen (identity — no calibration)",
       "calibration": [
