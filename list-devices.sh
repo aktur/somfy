@@ -144,14 +144,33 @@ echo "Found ${device_count} device(s):"
 echo
 
 echo "$response" | jq -r --slurpfile names "$NAME_MAP" '
+  def category:
+    if   test("RollerShutter|Blind|Shutter"; "i") then "Shutter"
+    elif test("Awning"; "i")                      then "Awning"
+    elif test("Temperature"; "i")                 then "Sensor: Temperature"
+    elif test("Light|Luminance|Sunshine"; "i")    then "Sensor: Light"
+    elif test("Contact"; "i")                     then "Sensor: Contact"
+    elif test("Occupancy|Motion|Presence"; "i")   then "Sensor: Motion"
+    elif test("Humidity|RelativeHumidity"; "i")   then "Sensor: Humidity"
+    elif test("Rain"; "i")                        then "Sensor: Rain"
+    elif test("Wind"; "i")                        then "Sensor: Wind"
+    elif test("Valve|Heating"; "i")               then "Heating Valve"
+    elif startswith("hue:")                       then "Light (Hue)"
+    elif startswith("netatmo:")                   then "Weather Station"
+    elif startswith("internal:")                  then "Internal/Gateway"
+    elif startswith("ogp:")                       then "Bridge"
+    else "Other"
+    end;
+
   ($names[0]) as $map |
   .[] | {
     name:      ($map[.deviceURL] // .label),
     url:       .deviceURL,
+    category:  (.controllableName | category),
     type:      .controllableName,
     available: .available,
-    states:    (.states // [] | map(select(.name | test("core:OnOff|core:TargetClosure|core:Status|core:Closure"; "i")) | "\(.name | split(":")[1]): \(.value)") | join(", "))
-  } | "[\(if .available then "✓" else "✗" end)] \(.name)
+    states:    (.states // [] | map("\(.name | split(":")[1]): \(.value)") | join(", "))
+  } | "[\(if .available then "✓" else "✗" end)] \(.name)  [\(.category)]
       URL:    \(.url)
       Type:   \(.type)
       States: \(if .states == "" then "(none)" else .states end)

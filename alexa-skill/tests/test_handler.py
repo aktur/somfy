@@ -13,6 +13,10 @@ import jwt_util
 
 SITE_OID = "32bf4a8d-7895-4cfd-a64e-00983a386dfe"
 DEVICE_URL = "io://XXXX-XXXX-XXXX/13387958"
+MOTION_URL = "io://XXXX-XXXX-XXXX/33333333"
+CONTACT_URL = "io://XXXX-XXXX-XXXX/44444444"
+TEMP_URL = "io://XXXX-XXXX-XXXX/55555555"
+LIGHT_URL = "io://XXXX-XXXX-XXXX/66666666"
 MOCK_TOKEN = "mock-scoped-token"
 MOCK_GINAITE_REFRESH = "mock-ginaite-refresh-token"
 _TEST_SECRET = "test-secret-do-not-use-in-production"
@@ -117,6 +121,34 @@ def _report_state_event(endpoint_id):
             "payload": {},
         }
     }
+
+
+def _sensor_report_state_event(endpoint_id, sensor_type):
+    return {
+        "directive": {
+            "header": {"namespace": "Alexa", "name": "ReportState",
+                       "payloadVersion": "3", "messageId": "msg-1", "correlationToken": "ct-1"},
+            "endpoint": {"endpointId": endpoint_id, "scope": _scope(),
+                         "cookie": {"sensor_type": sensor_type}},
+            "payload": {},
+        }
+    }
+
+
+MOCK_SENSOR_SETUP = {
+    "devices": [
+        {"deviceURL": MOTION_URL,  "label": "Motion sensor",
+         "controllableName": "io:OccupancySensorIOSystemComponent", "states": []},
+        {"deviceURL": CONTACT_URL, "label": "Contact sensor",
+         "controllableName": "io:ContactIOSystemSensor", "states": []},
+        {"deviceURL": TEMP_URL,    "label": "Temperature sensor",
+         "controllableName": "io:TemperatureIOSystemSensor", "states": []},
+        # Light sensor excluded — no suitable read-only Alexa interface
+        {"deviceURL": LIGHT_URL,   "label": "Light sensor",
+         "controllableName": "io:LightIOSystemSensor", "states": []},
+    ],
+    "rootPlace": {"label": "Home", "type": "HOME", "devices": [], "subPlaces": []},
+}
 
 
 # ---------------------------------------------------------------------------
@@ -469,6 +501,174 @@ def test_lambda_unknown_namespace_returns_error():
     resp = handler.lambda_handler(event, None)
     assert resp["event"]["header"]["name"] == "ErrorResponse"
     assert resp["event"]["payload"]["type"] == "INVALID_DIRECTIVE"
+
+
+# ---------------------------------------------------------------------------
+# Netatmo home map + device location
+# ---------------------------------------------------------------------------
+
+_NETATMO_DEVICES = [
+    {"deviceURL": "netatmo://NETATMO-AAA/home", "label": "Kujawska", "controllableName": "netatmo:HomeComponent", "states": []},
+    {"deviceURL": "netatmo://NETATMO-AAA/70:ee:50:af:3f:52#1", "label": "Duży pokój", "controllableName": "netatmo:WeatherStationTemperatureHumidityComponent", "states": []},
+    {"deviceURL": "netatmo://NETATMO-BBB/home", "label": "Antilope", "controllableName": "netatmo:HomeComponent", "states": []},
+    {"deviceURL": "netatmo://NETATMO-BBB/02:00:00:63:1b:3c#1", "label": "Outside", "controllableName": "netatmo:WeatherStationTemperatureHumidityComponent", "states": []},
+]
+
+
+def test_build_netatmo_home_map():
+    result = handler._build_netatmo_home_map(_NETATMO_DEVICES)
+    assert result == {"NETATMO-AAA": "Kujawska", "NETATMO-BBB": "Antilope"}
+
+
+def test_build_netatmo_home_map_empty():
+    assert handler._build_netatmo_home_map([]) == {}
+
+
+def test_device_location_netatmo_uses_home_label():
+    homes = {"NETATMO-AAA": "Kujawska"}
+    assert handler._device_location("netatmo://NETATMO-AAA/70:ee:50:af:3f:52#1", "Antilope", homes) == "Kujawska"
+
+
+def test_device_location_netatmo_falls_back_to_site_name():
+    assert handler._device_location("netatmo://NETATMO-UNKNOWN/module#1", "Antilope", {}) == "Antilope"
+
+
+def test_device_location_non_netatmo_uses_site_name():
+    assert handler._device_location("io://2027-1886-8813/4983315", "Antilope", {}) == "Antilope"
+
+
+def test_discovery_netatmo_device_uses_home_label():
+    setup = {
+        "devices": _NETATMO_DEVICES,
+        "rootPlace": {"label": "Home", "type": "HOME", "devices": [], "subPlaces": []},
+    }
+    with patch.object(handler, "_ginaite_refresh", return_value=MOCK_GINAITE_REFRESH), \
+         patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Antilope", MOCK_TOKEN)]), \
+         patch("somfy.get_setup", return_value=setup):
+        resp = handler.handle_discovery(_discovery_event())
+    endpoints = resp["event"]["payload"]["endpoints"]
+    names = [e["friendlyName"] for e in endpoints]
+    assert any(n.startswith("Kujawska - ") for n in names)
+    assert any(n.startswith("Antilope - ") for n in names)
+
+
+# ---------------------------------------------------------------------------
+# Sensor discovery
+# ---------------------------------------------------------------------------
+
+def test_discovery_includes_sensors():
+    with patch.object(handler, "_ginaite_refresh", return_value=MOCK_GINAITE_REFRESH), \
+         patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Home", MOCK_TOKEN)]), \
+         patch("somfy.get_setup", return_value=MOCK_SENSOR_SETUP):
+        resp = handler.handle_discovery(_discovery_event())
+    endpoints = resp["event"]["payload"]["endpoints"]
+    assert len(endpoints) == 4  # motion, contact, temperature, light
+
+
+def test_discovery_sensor_has_correct_interface():
+    with patch.object(handler, "_ginaite_refresh", return_value=MOCK_GINAITE_REFRESH), \
+         patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Home", MOCK_TOKEN)]), \
+         patch("somfy.get_setup", return_value=MOCK_SENSOR_SETUP):
+        resp = handler.handle_discovery(_discovery_event())
+    by_name = {e["friendlyName"].split(" - ")[1]: e for e in resp["event"]["payload"]["endpoints"]}
+    assert "Alexa.MotionSensor"      in {c["interface"] for c in by_name["Motion sensor"]["capabilities"]}
+    assert "Alexa.ContactSensor"     in {c["interface"] for c in by_name["Contact sensor"]["capabilities"]}
+    assert "Alexa.TemperatureSensor" in {c["interface"] for c in by_name["Temperature sensor"]["capabilities"]}
+    assert "Alexa.RangeController"   in {c["interface"] for c in by_name["Light sensor"]["capabilities"]}
+
+
+def test_discovery_sensor_has_sensor_type_cookie():
+    with patch.object(handler, "_ginaite_refresh", return_value=MOCK_GINAITE_REFRESH), \
+         patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Home", MOCK_TOKEN)]), \
+         patch("somfy.get_setup", return_value=MOCK_SENSOR_SETUP):
+        resp = handler.handle_discovery(_discovery_event())
+    for ep in resp["event"]["payload"]["endpoints"]:
+        assert "sensor_type" in ep.get("cookie", {})
+
+
+# ---------------------------------------------------------------------------
+# Sensor ReportState
+# ---------------------------------------------------------------------------
+
+def test_report_state_motion_detected():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, MOTION_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value={"core:OccupancyState": "personInside"}):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "MotionSensor"))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.MotionSensor"]["value"] == "DETECTED"
+
+
+def test_report_state_motion_not_detected():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, MOTION_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value={"core:OccupancyState": "noPersonInside"}):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "MotionSensor"))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.MotionSensor"]["value"] == "NOT_DETECTED"
+
+
+def test_report_state_contact_open():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, CONTACT_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value={"core:ContactState": "open"}):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "ContactSensor"))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.ContactSensor"]["value"] == "DETECTED"
+
+
+def test_report_state_contact_closed():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, CONTACT_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value={"core:ContactState": "closed"}):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "ContactSensor"))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.ContactSensor"]["value"] == "NOT_DETECTED"
+
+
+def test_report_state_temperature():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, TEMP_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value={"core:TemperatureState": 21.5}):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "TemperatureSensor"))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.TemperatureSensor"]["value"] == {"value": 21.5, "scale": "CELSIUS"}
+
+
+def test_report_state_light():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, LIGHT_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value={"core:LuminanceState": 1000.0}):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "LightSensor"))
+    props = {(p["namespace"], p.get("instance", "")): p for p in resp["context"]["properties"]}
+    assert props[("Alexa.RangeController", "Sensor.Illuminance")]["value"] == 1000.0
+
+
+def test_report_state_light_sunshine_fallback():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, LIGHT_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value={"core:SunShineState": 75.0}):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "LightSensor"))
+    props = {(p["namespace"], p.get("instance", "")): p for p in resp["context"]["properties"]}
+    assert props[("Alexa.RangeController", "Sensor.Illuminance")]["value"] == 75.0
+
+
+def test_report_state_light_luminance_preferred_over_sunshine():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, LIGHT_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value={"core:LuminanceState": 500.0, "core:SunShineState": 60.0}):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "LightSensor"))
+    props = {(p["namespace"], p.get("instance", "")): p for p in resp["context"]["properties"]}
+    assert props[("Alexa.RangeController", "Sensor.Illuminance")]["value"] == 500.0
+
+
+def test_report_state_sensor_unavailable():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, MOTION_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value=None):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "MotionSensor"))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.EndpointHealth"]["value"]["value"] == "UNREACHABLE"
 
 
 def test_lambda_handles_exception_gracefully():

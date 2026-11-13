@@ -106,21 +106,51 @@ def _decode_endpoint_id(endpoint_id: str) -> tuple[str, str]:
 # Discovery
 # ---------------------------------------------------------------------------
 
+def _build_netatmo_home_map(devices: list[dict]) -> dict[str, str]:
+    """Return {netatmo_station_id: home_label} for each netatmo .../home device."""
+    result = {}
+    for dev in devices:
+        url = dev.get("deviceURL", "")
+        if url.startswith("netatmo://") and url.endswith("/home"):
+            station_id = url.split("//")[1].split("/")[0]
+            result[station_id] = dev.get("label") or station_id
+    return result
+
+
+def _device_location(device_url: str, site_name: str, netatmo_homes: dict[str, str]) -> str:
+    """Return the display location name for a device.
+
+    Netatmo devices use their Netatmo home label (e.g. "Kujawska") so sensors
+    from a station integrated into another site's gateway keep the right prefix.
+    """
+    if device_url.startswith("netatmo://"):
+        station_id = device_url.split("//")[1].split("/")[0]
+        return netatmo_homes.get(station_id, site_name)
+    return site_name
+
+
 def handle_discovery(event):
     endpoints = []
     for site_oid, site_name, token in _site_tokens(_ginaite_refresh(event)):
         setup = somfy.get_setup(token)
         place_map = _build_place_map(setup)
+        netatmo_homes = _build_netatmo_home_map(setup.get("devices", []))
         for device in setup.get("devices", []):
-            if not somfy.is_supported_device(device):
-                continue
             device_url = device["deviceURL"]
             label = device.get("label") or device_url
-            friendly_name = _to_ascii(f"{site_name} - {label}")
+            location = _device_location(device_url, site_name, netatmo_homes)
+            friendly_name = _to_ascii(f"{location} - {label}")
             room = place_map.get(device_url)
             endpoint_id = _encode_endpoint_id(site_oid, device_url)
-            cookie = {"low_speed": "1"} if somfy.supports_low_speed(device) else None
-            endpoints.append(alexa._endpoint(endpoint_id, friendly_name, room, cookie=cookie))
+
+            if somfy.is_supported_device(device):
+                cookie = {"low_speed": "1"} if somfy.supports_low_speed(device) else None
+                endpoints.append(alexa._endpoint(endpoint_id, friendly_name, room, cookie=cookie))
+                continue
+
+            stype = somfy.sensor_type(device)
+            if stype:
+                endpoints.append(alexa.sensor_endpoint(endpoint_id, friendly_name, room, stype))
 
     return alexa.discovery_response(endpoints)
 
@@ -216,6 +246,12 @@ def handle_range_controller(event):
 def handle_report_state(event):
     site_oid, device_url = _decode_endpoint_id(event["directive"]["endpoint"]["endpointId"])
     token = _site_token(site_oid, _ginaite_refresh(event))
+
+    stype = event["directive"]["endpoint"].get("cookie", {}).get("sensor_type")
+    if stype:
+        states = somfy.get_sensor_states(token, device_url)
+        return alexa.sensor_state_report(event, stype, states)
+
     closure = somfy.get_closure(token, device_url)
     if closure is None:
         return alexa.state_report(event, 0, available=False)

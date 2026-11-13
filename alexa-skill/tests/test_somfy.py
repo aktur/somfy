@@ -67,3 +67,62 @@ def test_get_closure_falls_back_to_target_closure_state():
     devices = [_device(DEVICE_URL, {"core:TargetClosureState": 70})]
     with patch("somfy.get_devices", return_value=devices):
         assert somfy.get_closure(TOKEN, DEVICE_URL) == 70
+
+
+# ---------------------------------------------------------------------------
+# sensor_type
+# ---------------------------------------------------------------------------
+
+def test_sensor_type_motion():
+    assert somfy.sensor_type({"controllableName": "io:OccupancySensorIOSystemComponent"}) == somfy.MOTION_SENSOR_TYPE
+
+
+def test_sensor_type_contact():
+    assert somfy.sensor_type({"controllableName": "io:ContactIOSystemSensor"}) == somfy.CONTACT_SENSOR_TYPE
+
+
+def test_sensor_type_temperature():
+    assert somfy.sensor_type({"controllableName": "io:TemperatureIOSystemSensor"}) == somfy.TEMPERATURE_SENSOR_TYPE
+
+
+def test_sensor_type_light():
+    assert somfy.sensor_type({"controllableName": "io:LightIOSystemSensor"}) == somfy.LIGHT_SENSOR_TYPE
+
+
+def test_sensor_type_shutter_is_none():
+    assert somfy.sensor_type({"controllableName": "io:RollerShutterGenericIOComponent"}) is None
+
+
+def test_sensor_type_hue_light_is_none():
+    assert somfy.sensor_type({"controllableName": "hue:ColorLightComponent"}) is None
+
+
+def test_sensor_type_hue_dimmable_is_none():
+    assert somfy.sensor_type({"controllableName": "hue:DimmableLightComponent"}) is None
+
+
+def test_sensor_type_unknown_is_none():
+    assert somfy.sensor_type({"controllableName": "homekit:StackComponent"}) is None
+
+
+# ---------------------------------------------------------------------------
+# get_sensor_states
+# ---------------------------------------------------------------------------
+
+def test_get_sensor_states_returns_states():
+    devices = [_device(DEVICE_URL, {"core:OccupancyState": "noPersonInside", "core:StatusState": "available"})]
+    with patch("somfy.get_devices", return_value=devices):
+        states = somfy.get_sensor_states(TOKEN, DEVICE_URL)
+    assert states["core:OccupancyState"] == "noPersonInside"
+
+
+def test_get_sensor_states_returns_none_when_unavailable():
+    devices = [_device(DEVICE_URL, {"core:OccupancyState": "personInside", "core:StatusState": "unavailable"})]
+    with patch("somfy.get_devices", return_value=devices):
+        assert somfy.get_sensor_states(TOKEN, DEVICE_URL) is None
+
+
+def test_get_sensor_states_returns_none_when_not_found():
+    devices = [_device(OTHER_URL, {"core:OccupancyState": "noPersonInside"})]
+    with patch("somfy.get_devices", return_value=devices):
+        assert somfy.get_sensor_states(TOKEN, DEVICE_URL) is None

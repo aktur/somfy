@@ -28,6 +28,18 @@ AWNING_TYPE = "Awning"
 
 _SUPPORTED_TYPES = (ROLLER_SHUTTER_TYPE, AWNING_TYPE)
 
+MOTION_SENSOR_TYPE = "MotionSensor"
+CONTACT_SENSOR_TYPE = "ContactSensor"
+TEMPERATURE_SENSOR_TYPE = "TemperatureSensor"
+LIGHT_SENSOR_TYPE = "LightSensor"
+
+_SENSOR_PATTERNS: dict[str, tuple[str, ...]] = {
+    MOTION_SENSOR_TYPE:      ("Occupancy", "Motion", "Presence"),
+    CONTACT_SENSOR_TYPE:     ("Contact",),
+    TEMPERATURE_SENSOR_TYPE: ("Temperature",),
+    LIGHT_SENSOR_TYPE:       ("Light", "Luminance", "Sunshine"),
+}
+
 
 def _post_form(url: str, fields: dict) -> dict:
     data = urllib.parse.urlencode(fields).encode()
@@ -159,3 +171,27 @@ def get_closure(site_token: str, device_url: str) -> int | None:
 def is_supported_device(device: dict) -> bool:
     name = device.get("controllableName", "")
     return any(t in name for t in _SUPPORTED_TYPES)
+
+
+def sensor_type(device: dict) -> str | None:
+    """Return the sensor type constant for a device, or None if not a known sensor."""
+    name = device.get("controllableName", "")
+    # Hue devices are lights/actuators, never sensors — exclude them first.
+    if name.startswith("hue:"):
+        return None
+    for stype, keywords in _SENSOR_PATTERNS.items():
+        if any(kw in name for kw in keywords):
+            return stype
+    return None
+
+
+def get_sensor_states(site_token: str, device_url: str) -> dict | None:
+    """Return raw states dict for a sensor device, or None if unavailable/offline."""
+    devices = get_devices(site_token)
+    for dev in devices:
+        if dev["deviceURL"] == device_url:
+            states = {s["name"]: s["value"] for s in dev.get("states", [])}
+            if states.get("core:StatusState") == "unavailable":
+                return None
+            return states
+    return None
