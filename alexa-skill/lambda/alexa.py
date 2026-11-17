@@ -209,7 +209,7 @@ _SENSOR_CONFIG: dict[str, dict] = {
             "version": "3",
             "properties": {
                 "supported": [{"name": "detectionState"}],
-                "proactivelyReported": False,
+                "proactivelyReported": True,
                 "retrievable": True,
             },
         },
@@ -223,7 +223,7 @@ _SENSOR_CONFIG: dict[str, dict] = {
             "version": "3",
             "properties": {
                 "supported": [{"name": "detectionState"}],
-                "proactivelyReported": False,
+                "proactivelyReported": True,
                 "retrievable": True,
             },
         },
@@ -377,11 +377,11 @@ def sensor_state_report(event: dict, sensor_type: str, states: dict | None) -> d
     }
 
 
-def error_response(event: dict, error_type: str, message: str) -> dict:
+def error_response(event: dict, error_type: str, message: str, namespace: str = "Alexa") -> dict:
     directive = event.get("directive", {})
     return {
         "event": {
-            "header": _header("Alexa", "ErrorResponse", directive.get("header", {}).get("correlationToken")),
+            "header": _header(namespace, "ErrorResponse", directive.get("header", {}).get("correlationToken")),
             "endpoint": directive.get("endpoint", {}),
             "payload": {"type": error_type, "message": message},
         }

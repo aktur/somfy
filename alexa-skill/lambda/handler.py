@@ -19,8 +19,11 @@ import urllib.parse
 
 import alexa
 import calibration
+import event_gateway
 import jwt_util
+import lwa
 import somfy
+import token_store
 
 logger = logging.getLogger()
 logger.setLevel(logging.WARNING)
@@ -38,6 +41,10 @@ def lambda_handler(event, context):
     name = event["directive"]["header"].get("name", "")
 
     try:
+        if namespace == "Alexa.Authorization" and name == "AcceptGrant":
+            return handle_accept_grant(event)
+        if namespace == "Alexa.Authorization" and name == "RevokeGrant":
+            return handle_revoke_grant(event)
         if namespace == "Alexa.Discovery":
             return handle_discovery(event)
         if namespace == "Alexa.PowerController":
@@ -50,9 +57,52 @@ def lambda_handler(event, context):
             return {}
     except Exception as exc:
         logger.exception("Unhandled error processing %s/%s", namespace, name)
-        return alexa.error_response(event, "INTERNAL_ERROR", str(exc))
+        err_ns = "Alexa.Authorization" if namespace == "Alexa.Authorization" else "Alexa"
+        err_type = "ACCEPT_GRANT_FAILED" if namespace == "Alexa.Authorization" else "INTERNAL_ERROR"
+        return alexa.error_response(event, err_type, str(exc), namespace=err_ns)
 
     return alexa.error_response(event, "INVALID_DIRECTIVE", f"Unknown: {namespace}/{name}")
+
+
+# ---------------------------------------------------------------------------
+# AcceptGrant / RevokeGrant
+# ---------------------------------------------------------------------------
+
+def handle_accept_grant(event):
+    directive = event["directive"]
+    code = directive["payload"]["grant"]["code"]
+    grantee_token = directive["payload"]["grantee"]["token"]
+
+    # Store Event Gateway credentials (from LWA exchange)
+    tokens = lwa.exchange_auth_code(code)
+    token_store.save_event_gateway_tokens(
+        tokens["access_token"],
+        tokens.get("refresh_token"),
+        int(tokens["expires_in"]),
+    )
+
+    # Store the Ginaite refresh token so the poller can call Somfy
+    claims = jwt_util.decode(grantee_token, os.environ["JWT_SECRET"])
+    token_store.save_ginaite_refresh(claims["gr"])
+
+    print("[handler] AcceptGrant: tokens stored")
+    return {
+        "event": {
+            "header": alexa._header("Alexa.Authorization", "AcceptGrant.Response"),
+            "payload": {},
+        }
+    }
+
+
+def handle_revoke_grant(event):
+    token_store.clear_event_gateway_tokens()
+    print("[handler] RevokeGrant: tokens cleared")
+    return {
+        "event": {
+            "header": alexa._header("Alexa.Authorization", "RevokeGrant.Response"),
+            "payload": {},
+        }
+    }
 
 
 # ---------------------------------------------------------------------------

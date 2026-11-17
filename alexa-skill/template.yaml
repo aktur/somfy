@@ -10,7 +10,15 @@ Parameters:
   JwtSecret:
     Type: String
     NoEcho: true
-    Description: "HS256 signing secret shared between the auth proxy and the skill Lambda (run: openssl rand -hex 32)"
+    Description: "HS256 signing secret shared between the auth proxy and the skill Lambda"
+  EventGatewayClientId:
+    Type: String
+    NoEcho: true
+    Description: "Alexa Event Gateway client_id (from skill 'Send Alexa Events' page)"
+  EventGatewayClientSecret:
+    Type: String
+    NoEcho: true
+    Description: "Alexa Event Gateway client_secret (from skill 'Send Alexa Events' page)"
 
 Globals:
   Function:
@@ -20,10 +28,38 @@ Globals:
     Environment:
       Variables:
         JWT_SECRET: !Ref JwtSecret
+        EVENT_GATEWAY_CLIENT_ID: !Ref EventGatewayClientId
+        EVENT_GATEWAY_CLIENT_SECRET: !Ref EventGatewayClientSecret
+        SSM_PREFIX: "/somfy-alexa-skill"
     Tags:
       project: somfy-alexa-skill
 
 Resources:
+
+  # Shared IAM role for Lambdas that need SSM access
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: somfy-alexa-lambda-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SsmTokenAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/somfy-alexa-skill/*"
 
   # OAuth2 auth-code proxy — wraps Somfy password grant for Alexa account linking
   AuthProxyFunction:
@@ -33,6 +69,7 @@ Resources:
       Handler: auth_proxy.handler
       CodeUri: lambda/
       Description: "Alexa account linking: presents Somfy login form, issues JWTs"
+      Role: !GetAtt LambdaRole.Arn
       FunctionUrlConfig:
         AuthType: NONE
 
@@ -44,9 +81,9 @@ Resources:
       Handler: handler.lambda_handler
       CodeUri: lambda/
       Description: "Handles Alexa Smart Home directives for Somfy TaHoma (multi-site)"
+      Role: !GetAtt LambdaRole.Arn
 
   # Grant Alexa Smart Home permission to invoke the skill Lambda.
-  # Paste the FunctionArn output into the Alexa Skill endpoint configuration.
   AlexaPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -54,6 +91,24 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: alexa-connectedhome.amazon.com
       EventSourceToken: !Ref AlexaSkillId
+
+  # Scheduled poller — checks sensor states every minute and sends ChangeReports
+  PollerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: somfy-alexa-poller
+      Handler: poller.lambda_handler
+      CodeUri: lambda/
+      Description: "Polls Somfy motion/contact sensor states and sends Alexa ChangeReports"
+      Timeout: 60
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        Schedule:
+          Type: Schedule
+          Properties:
+            Schedule: "rate(1 minute)"
+            Name: somfy-alexa-poller-schedule
+            Enabled: true
 
 Outputs:
   AuthProxyUrl:

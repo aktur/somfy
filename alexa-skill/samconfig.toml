@@ -5,8 +5,8 @@ stack_name = "somfy-tahoma-app"
 resolve_s3 = true
 s3_prefix = "somfy-tahoma-app"
 confirm_changeset = false
-capabilities = "CAPABILITY_IAM"
-parameter_overrides = "AlexaSkillId=\"amzn1.ask.skill.20f47101-fe6b-432e-a224-816497865d5f\""
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = "AlexaSkillId=\"amzn1.ask.skill.20f47101-fe6b-432e-a224-816497865d5f\" EventGatewayClientId=\"amzn1.application-oa2-client.3ab50d245ed54054ac35faa4b8993e27\" EventGatewayClientSecret=\"amzn1.oa2-cs.v1.75c81cecdc93314bc144ee7c0554520e2651704deeda07ae567b72c36d5b0892\""
 image_repositories = []
 
 [default.global.parameters]
