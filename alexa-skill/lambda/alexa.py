@@ -237,14 +237,14 @@ _SENSOR_CONFIG: dict[str, dict] = {
             "version": "3",
             "properties": {
                 "supported": [{"name": "temperature"}],
-                "proactivelyReported": False,
+                "proactivelyReported": True,
                 "retrievable": True,
             },
         },
     },
     "LightSensor": {
         "description": "Somfy Light Sensor",
-        "category": "OTHER",
+        "category": "LIGHT_SENSOR",
         "capability": {
             "type": "AlexaInterface",
             "interface": "Alexa.RangeController",
@@ -252,7 +252,7 @@ _SENSOR_CONFIG: dict[str, dict] = {
             "version": "3",
             "properties": {
                 "supported": [{"name": "rangeValue"}],
-                "proactivelyReported": False,
+                "proactivelyReported": True,
                 "retrievable": True,
                 "nonControllable": True,
             },
