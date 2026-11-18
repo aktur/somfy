@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 
-Description: Somfy TaHoma - Alexa Smart Home Skill (multi-site)
+Description: Somfy TaHoma - Alexa Smart Home Skill (multi-site, multi-user)
 
 Parameters:
   AlexaSkillId:
@@ -30,13 +30,33 @@ Globals:
         JWT_SECRET: !Ref JwtSecret
         EVENT_GATEWAY_CLIENT_ID: !Ref EventGatewayClientId
         EVENT_GATEWAY_CLIENT_SECRET: !Ref EventGatewayClientSecret
-        SSM_PREFIX: "/somfy-alexa-skill"
+        DYNAMODB_TABLE: !Ref SomfyAlexaTable
     Tags:
       project: somfy-alexa-skill
 
 Resources:
 
-  # Shared IAM role for Lambdas that need SSM access
+  # Per-user tokens and sensor states
+  SomfyAlexaTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: somfy-alexa-skill
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      Tags:
+        - Key: project
+          Value: somfy-alexa-skill
+
+  # Shared IAM role for all Lambdas
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -50,16 +70,20 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: SsmTokenAccess
+        - PolicyName: DynamoDBAccess
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
-                  - ssm:GetParameter
-                  - ssm:PutParameter
-                  - ssm:DeleteParameter
-                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/somfy-alexa-skill/*"
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchWriteItem
+                Resource: !GetAtt SomfyAlexaTable.Arn
 
   # OAuth2 auth-code proxy — wraps Somfy password grant for Alexa account linking
   AuthProxyFunction:
@@ -80,7 +104,7 @@ Resources:
       FunctionName: somfy-alexa-skill
       Handler: handler.lambda_handler
       CodeUri: lambda/
-      Description: "Handles Alexa Smart Home directives for Somfy TaHoma (multi-site)"
+      Description: "Handles Alexa Smart Home directives for Somfy TaHoma (multi-site, multi-user)"
       Role: !GetAtt LambdaRole.Arn
 
   # Grant Alexa Smart Home permission to invoke the skill Lambda.
@@ -117,3 +141,6 @@ Outputs:
   FunctionArn:
     Description: "Lambda ARN to paste into the Alexa Skill endpoint configuration"
     Value: !GetAtt SomfyAlexaFunction.Arn
+  TableName:
+    Description: "DynamoDB table for per-user tokens and sensor states"
+    Value: !Ref SomfyAlexaTable

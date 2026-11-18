@@ -118,7 +118,7 @@ def _exchange_code(params):
             raise ValueError("redirect_uri mismatch")
     except ValueError as exc:
         return _token_error("invalid_grant", str(exc))
-    return _issue_tokens(claims["gr"], secret)
+    return _issue_tokens(claims["gr"], claims.get("sub", ""), secret)
 
 
 def _exchange_refresh(params):
@@ -129,16 +129,16 @@ def _exchange_refresh(params):
             raise ValueError("Not a refresh token")
     except ValueError as exc:
         return _token_error("invalid_grant", str(exc))
-    return _issue_tokens(claims["gr"], secret)
+    return _issue_tokens(claims["gr"], claims.get("sub", ""), secret)
 
 
-def _issue_tokens(ginaite_refresh: str, secret: str) -> dict:
+def _issue_tokens(ginaite_refresh: str, sub: str, secret: str) -> dict:
     now = int(time.time())
     access_token = jwt_util.encode(
-        {"gr": ginaite_refresh, "exp": now + TOKEN_TTL, "t": "access"}, secret
+        {"sub": sub, "gr": ginaite_refresh, "exp": now + TOKEN_TTL, "t": "access"}, secret
     )
     refresh_token = jwt_util.encode(
-        {"gr": ginaite_refresh, "exp": now + REFRESH_TTL, "t": "refresh"}, secret
+        {"sub": sub, "gr": ginaite_refresh, "exp": now + REFRESH_TTL, "t": "refresh"}, secret
     )
     return {
         "statusCode": 200,

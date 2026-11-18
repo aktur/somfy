@@ -73,19 +73,21 @@ def handle_accept_grant(event):
     code = directive["payload"]["grant"]["code"]
     grantee_token = directive["payload"]["grantee"]["token"]
 
-    # Store Event Gateway credentials (from LWA exchange)
+    claims = jwt_util.decode(grantee_token, os.environ["JWT_SECRET"])
+    user_id = claims.get("sub", "")
+    if not user_id:
+        raise ValueError("AcceptGrant token missing 'sub' claim — user must re-link the skill")
+
     tokens = lwa.exchange_auth_code(code)
     token_store.save_event_gateway_tokens(
+        user_id,
         tokens["access_token"],
         tokens.get("refresh_token"),
         int(tokens["expires_in"]),
     )
+    token_store.save_ginaite_refresh(user_id, claims["gr"])
 
-    # Store the Ginaite refresh token so the poller can call Somfy
-    claims = jwt_util.decode(grantee_token, os.environ["JWT_SECRET"])
-    token_store.save_ginaite_refresh(claims["gr"])
-
-    print("[handler] AcceptGrant: tokens stored")
+    print(f"[handler] AcceptGrant: tokens stored for user={user_id}")
     return {
         "event": {
             "header": alexa._header("Alexa.Authorization", "AcceptGrant.Response"),
@@ -95,8 +97,17 @@ def handle_accept_grant(event):
 
 
 def handle_revoke_grant(event):
-    token_store.clear_event_gateway_tokens()
-    print("[handler] RevokeGrant: tokens cleared")
+    grantee_token = event["directive"]["payload"]["grantee"]["token"]
+    try:
+        claims = jwt_util.decode(grantee_token, os.environ["JWT_SECRET"])
+        user_id = claims.get("sub", "")
+    except Exception:
+        user_id = ""
+    if user_id:
+        token_store.delete_user(user_id)
+        print(f"[handler] RevokeGrant: user={user_id} deleted")
+    else:
+        print("[handler] RevokeGrant: could not identify user, no data deleted")
     return {
         "event": {
             "header": alexa._header("Alexa.Authorization", "RevokeGrant.Response"),
@@ -109,13 +120,21 @@ def handle_revoke_grant(event):
 # Auth — JWT issued by auth proxy, contains Ginaite refresh token
 # ---------------------------------------------------------------------------
 
-def _ginaite_refresh(event: dict) -> str:
-    """Decode the JWT the auth proxy issued and return the Ginaite refresh token."""
+def _jwt_claims(event: dict) -> dict:
     directive = event["directive"]
     scope = (directive.get("payload", {}).get("scope")
              or directive.get("endpoint", {}).get("scope", {}))
-    claims = jwt_util.decode(scope["token"], os.environ["JWT_SECRET"])
-    return claims["gr"]
+    return jwt_util.decode(scope["token"], os.environ["JWT_SECRET"])
+
+
+def _ginaite_refresh(event: dict) -> str:
+    """Decode the JWT the auth proxy issued and return the Ginaite refresh token."""
+    return _jwt_claims(event)["gr"]
+
+
+def _user_id(event: dict) -> str:
+    """Return the user identity (Somfy email) from the JWT."""
+    return _jwt_claims(event).get("sub", "")
 
 
 def _site_tokens(ginaite_refresh: str) -> list[tuple[str, str, str]]:

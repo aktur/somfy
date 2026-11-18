@@ -16,8 +16,8 @@ _EXPIRY_SAFETY_MARGIN_MS = 5 * 60 * 1000
 _BASE_URL = os.environ.get("EVENT_GATEWAY_BASE_URL", "https://api.eu.amazonalexa.com")
 
 
-def get_valid_access_token(force_refresh: bool = False) -> str:
-    tokens = token_store.get_event_gateway_tokens()
+def get_valid_access_token(user_id: str, force_refresh: bool = False) -> str:
+    tokens = token_store.get_event_gateway_tokens(user_id)
     if (
         not force_refresh
         and tokens["access_token"]
@@ -28,6 +28,7 @@ def get_valid_access_token(force_refresh: bool = False) -> str:
     if tokens["refresh_token"]:
         refreshed = lwa.refresh_access_token(tokens["refresh_token"])
         token_store.save_event_gateway_tokens(
+            user_id,
             refreshed["access_token"],
             refreshed.get("refresh_token") or tokens["refresh_token"],
             int(refreshed["expires_in"]),
@@ -75,17 +76,18 @@ def _build_change_report(endpoint_id: str, access_token: str, change_props: list
     }
 
 
-def _post_with_retry(payload: dict) -> int:
+def _post_with_retry(user_id: str, payload: dict) -> int:
     access_token = payload["event"]["endpoint"]["scope"]["token"]
     status = _http_post(payload, access_token)
     if status == 401:
-        access_token = get_valid_access_token(force_refresh=True)
+        access_token = get_valid_access_token(user_id, force_refresh=True)
         payload["event"]["endpoint"]["scope"]["token"] = access_token
         status = _http_post(payload, access_token)
     return status
 
 
 def send_change_report(
+    user_id: str,
     endpoint_id: str,
     sensor_type: str,
     detection_state: str,
@@ -99,7 +101,7 @@ def send_change_report(
     else:
         raise ValueError(f"ChangeReport not supported for sensor_type: {sensor_type}")
 
-    access_token = get_valid_access_token()
+    access_token = get_valid_access_token(user_id)
     health_prop = {
         "namespace": "Alexa.EndpointHealth",
         "name": "connectivity",
@@ -116,7 +118,7 @@ def send_change_report(
     }
     payload = _build_change_report(endpoint_id, access_token, [change_prop], [health_prop])
 
-    status = _post_with_retry(payload)
+    status = _post_with_retry(user_id, payload)
     if status not in (200, 202):
         raise RuntimeError(f"Event Gateway rejected ChangeReport: HTTP {status}")
 
@@ -127,12 +129,13 @@ def send_change_report(
 
 
 def send_temperature_change_report(
+    user_id: str,
     endpoint_id: str,
     celsius: float,
     time_of_sample: str,
 ) -> None:
     """Send a ChangeReport for a temperature sensor."""
-    access_token = get_valid_access_token()
+    access_token = get_valid_access_token(user_id)
     health_prop = {
         "namespace": "Alexa.EndpointHealth",
         "name": "connectivity",
@@ -149,7 +152,7 @@ def send_temperature_change_report(
     }
     payload = _build_change_report(endpoint_id, access_token, [change_prop], [health_prop])
 
-    status = _post_with_retry(payload)
+    status = _post_with_retry(user_id, payload)
     if status not in (200, 202):
         raise RuntimeError(f"Event Gateway rejected temperature ChangeReport: HTTP {status}")
 
@@ -160,12 +163,13 @@ def send_temperature_change_report(
 
 
 def send_lux_change_report(
+    user_id: str,
     endpoint_id: str,
     lux_value: float,
     time_of_sample: str,
 ) -> None:
     """Send a ChangeReport for a light sensor (Alexa.RangeController / Sensor.Illuminance)."""
-    access_token = get_valid_access_token()
+    access_token = get_valid_access_token(user_id)
     health_prop = {
         "namespace": "Alexa.EndpointHealth",
         "name": "connectivity",
@@ -183,7 +187,7 @@ def send_lux_change_report(
     }
     payload = _build_change_report(endpoint_id, access_token, [change_prop], [health_prop])
 
-    status = _post_with_retry(payload)
+    status = _post_with_retry(user_id, payload)
     if status not in (200, 202):
         raise RuntimeError(f"Event Gateway rejected lux ChangeReport: HTTP {status}")
 
