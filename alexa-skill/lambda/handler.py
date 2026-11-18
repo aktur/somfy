@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import unicodedata
 import urllib.parse
 
@@ -29,8 +30,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.WARNING)
 
 
+_NON_ALEXA = re.compile(r"[^a-zA-Z0-9 ']")
+
+
 def _to_ascii(text: str) -> str:
-    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").strip()
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    cleaned = _NON_ALEXA.sub(" ", ascii_text)
+    return " ".join(cleaned.split())
 
 
 def lambda_handler(event, context):
@@ -208,7 +214,7 @@ def handle_discovery(event):
             device_url = device["deviceURL"]
             label = device.get("label") or device_url
             location = _device_location(device_url, site_name, netatmo_homes)
-            friendly_name = _to_ascii(f"{location} - {label}")
+            friendly_name = _to_ascii(f"{location} {label} by Multitahoma")
             room = place_map.get(device_url)
             endpoint_id = _encode_endpoint_id(site_oid, device_url)
 

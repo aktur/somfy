@@ -202,8 +202,19 @@ def test_to_ascii_strips_trailing_whitespace():
 
 
 def test_to_ascii_em_dash_removed():
-    result = handler._to_ascii("Kujawska — Roleta")
-    assert "—" not in result
+    assert handler._to_ascii("Kujawska — Roleta") == "Kujawska Roleta"
+
+
+def test_to_ascii_collapses_internal_double_space():
+    assert handler._to_ascii("Antilope  Bedroom") == "Antilope Bedroom"
+
+
+def test_to_ascii_strips_non_alexa_ascii_chars():
+    assert handler._to_ascii("Sensor (bedroom)/hall") == "Sensor bedroom hall"
+
+
+def test_to_ascii_strips_hyphen():
+    assert handler._to_ascii("Sensor-A") == "Sensor A"
 
 
 # ---------------------------------------------------------------------------
@@ -458,9 +469,9 @@ def test_discovery_multi_site():
         resp = handler.handle_discovery(_discovery_event())
     endpoints = resp["event"]["payload"]["endpoints"]
     assert len(endpoints) == 4  # site1: 3 devices, site2: 1 device
-    site_names = {ep["friendlyName"].split(" - ")[0] for ep in endpoints}
-    assert "Kujawska" in site_names
-    assert "Antilope" in site_names
+    names = [ep["friendlyName"] for ep in endpoints]
+    assert any(n.startswith("Kujawska ") for n in names)
+    assert any(n.startswith("Antilope ") for n in names)
 
 
 # ---------------------------------------------------------------------------
@@ -548,8 +559,8 @@ def test_discovery_netatmo_device_uses_home_label():
         resp = handler.handle_discovery(_discovery_event())
     endpoints = resp["event"]["payload"]["endpoints"]
     names = [e["friendlyName"] for e in endpoints]
-    assert any(n.startswith("Kujawska - ") for n in names)
-    assert any(n.startswith("Antilope - ") for n in names)
+    assert any(n.startswith("Kujawska ") for n in names)
+    assert any(n.startswith("Antilope ") for n in names)
 
 
 # ---------------------------------------------------------------------------
@@ -570,7 +581,9 @@ def test_discovery_sensor_has_correct_interface():
          patch.object(handler, "_site_tokens", return_value=[(SITE_OID, "Home", MOCK_TOKEN)]), \
          patch("somfy.get_setup", return_value=MOCK_SENSOR_SETUP):
         resp = handler.handle_discovery(_discovery_event())
-    by_name = {e["friendlyName"].split(" - ")[1]: e for e in resp["event"]["payload"]["endpoints"]}
+    # friendly name is "{location} {label} by Multitahoma"; location is "Home" for this test setup
+    by_name = {e["friendlyName"].removeprefix("Home ").removesuffix(" by Multitahoma"): e
+               for e in resp["event"]["payload"]["endpoints"]}
     assert "Alexa.MotionSensor"      in {c["interface"] for c in by_name["Motion sensor"]["capabilities"]}
     assert "Alexa.ContactSensor"     in {c["interface"] for c in by_name["Contact sensor"]["capabilities"]}
     assert "Alexa.TemperatureSensor" in {c["interface"] for c in by_name["Temperature sensor"]["capabilities"]}
