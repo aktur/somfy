@@ -80,11 +80,12 @@ def _check_site(user_id: str, site_oid: str, devices: list[dict]) -> None:
             continue
 
         device_url = device["deviceURL"]
+        label = device.get("label", "")
         endpoint_id = _encode_endpoint_id(site_oid, device_url)
         ts = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
 
         if stype == somfy.TEMPERATURE_SENSOR_TYPE:
-            _check_temperature(user_id, endpoint_id, states, ts)
+            _check_temperature(user_id, endpoint_id, states, ts, label)
             continue
 
         if stype == somfy.MOTION_SENSOR_TYPE:
@@ -106,14 +107,13 @@ def _check_site(user_id: str, site_oid: str, devices: list[dict]) -> None:
                 event_gateway.send_change_report(user_id, endpoint_id, stype, new_state, ts)
             except Exception as exc:
                 print(f"[poller] ChangeReport failed for {endpoint_id}: {exc}")
-
-        token_store.save_sensor_state(user_id, endpoint_id, new_state, ts)
+            token_store.save_sensor_state(user_id, endpoint_id, new_state, ts, label)
 
 
 _TEMPERATURE_CHANGE_THRESHOLD = 0.5
 
 
-def _check_temperature(user_id: str, endpoint_id: str, states: dict, ts: str) -> None:
+def _check_temperature(user_id: str, endpoint_id: str, states: dict, ts: str, label: str = "") -> None:
     raw = states.get("core:TemperatureState")
     if raw is None:
         return
@@ -122,7 +122,8 @@ def _check_temperature(user_id: str, endpoint_id: str, states: dict, ts: str) ->
     stored = token_store.get_sensor_state(user_id, endpoint_id)
     old_temp = round(float(stored["state"]), 1) if stored and stored["state"] is not None else None
 
-    if old_temp is None or abs(new_temp - old_temp) >= _TEMPERATURE_CHANGE_THRESHOLD:
+    changed = old_temp is None or abs(new_temp - old_temp) >= _TEMPERATURE_CHANGE_THRESHOLD
+    if changed:
         if old_temp is not None:
             print(f"[poller] temperature change: user={user_id} {endpoint_id} {old_temp} → {new_temp}")
         try:
@@ -130,6 +131,6 @@ def _check_temperature(user_id: str, endpoint_id: str, states: dict, ts: str) ->
         except Exception as exc:
             print(f"[poller] Temperature ChangeReport failed for {endpoint_id}: {exc}")
 
-    token_store.save_sensor_state(user_id, endpoint_id, str(new_temp), ts)
+    token_store.save_sensor_state(user_id, endpoint_id, str(new_temp), ts if changed else None, label)
 
 

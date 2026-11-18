@@ -143,6 +143,30 @@ def test_sensor_states_isolated_per_endpoint():
     assert token_store.get_sensor_state(USER_A, ENDPOINT_2)["state"] == "21.5"
 
 
+def test_save_sensor_state_without_ts_preserves_existing_ts():
+    token_store.save_sensor_state(USER_A, ENDPOINT_1, "DETECTED", "2026-11-18T10:00:00.000Z")
+    token_store.save_sensor_state(USER_A, ENDPOINT_1, "DETECTED")  # no ts — same state, no change
+    result = token_store.get_sensor_state(USER_A, ENDPOINT_1)
+    assert result["ts"] == "2026-11-18T10:00:00.000Z"
+    assert result["state"] == "DETECTED"
+
+
+def test_save_sensor_state_stores_friendly_name():
+    token_store.save_sensor_state(USER_A, ENDPOINT_1, "NOT_DETECTED", "ts1", "Rain-1")
+    table = token_store._get_table()
+    item = table.get_item(Key={"user_id": USER_A, "SK": f"sensor|{ENDPOINT_1}"})["Item"]
+    assert item["name"] == "Rain-1"
+
+
+def test_save_sensor_state_friendly_name_updated_independently():
+    token_store.save_sensor_state(USER_A, ENDPOINT_1, "DETECTED", "ts1", "Old Name")
+    token_store.save_sensor_state(USER_A, ENDPOINT_1, "DETECTED", None, "New Name")
+    table = token_store._get_table()
+    item = table.get_item(Key={"user_id": USER_A, "SK": f"sensor|{ENDPOINT_1}"})["Item"]
+    assert item["name"] == "New Name"
+    assert item["ts"] == "ts1"  # ts not touched
+
+
 # ---------------------------------------------------------------------------
 # list_users
 # ---------------------------------------------------------------------------

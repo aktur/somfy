@@ -244,10 +244,10 @@ _SENSOR_CONFIG: dict[str, dict] = {
     },
     "RainSensor": {
         "description": "Somfy Rain Sensor",
-        "category": "CONTACT_SENSOR",
+        "category": "MOTION_SENSOR",
         "capability": {
             "type": "AlexaInterface",
-            "interface": "Alexa.ContactSensor",
+            "interface": "Alexa.MotionSensor",
             "version": "3",
             "properties": {
                 "supported": [{"name": "detectionState"}],
@@ -340,7 +340,7 @@ def _sensor_properties(
     elif sensor_type == "RainSensor":
         rain = states.get("core:RainState", "notDetected")
         props.append({
-            "namespace": "Alexa.ContactSensor",
+            "namespace": "Alexa.MotionSensor",
             "name": "detectionState",
             "value": "DETECTED" if rain == "detected" else "NOT_DETECTED",
             "timeOfSample": _now(),

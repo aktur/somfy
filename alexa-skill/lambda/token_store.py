@@ -2,7 +2,7 @@
 
 Single table, two item types (single-table design):
   PK=user_id  SK="tokens"              → ginaite_refresh, eg_access_token, eg_refresh_token, eg_expires_at
-  PK=user_id  SK="sensor|{endpoint_id}"→ state, ts
+  PK=user_id  SK="sensor|{endpoint_id}"→ state, ts (last-changed), name (friendly label)
 """
 
 from __future__ import annotations
@@ -81,17 +81,30 @@ def get_sensor_state(user_id: str, endpoint_id: str) -> dict | None:
     resp = _get_table().get_item(Key={"user_id": user_id, "SK": f"sensor|{endpoint_id}"})
     item = resp.get("Item")
     if item:
-        return {"state": item["state"], "ts": item["ts"]}
+        return {"state": item["state"], "ts": item.get("ts", "")}
     return None
 
 
-def save_sensor_state(user_id: str, endpoint_id: str, state_value: str, time_of_sample: str) -> None:
-    _get_table().put_item(Item={
-        "user_id": user_id,
-        "SK": f"sensor|{endpoint_id}",
-        "state": state_value,
-        "ts": time_of_sample,
-    })
+def save_sensor_state(
+    user_id: str,
+    endpoint_id: str,
+    state_value: str,
+    time_of_sample: str | None = None,
+    friendly_name: str | None = None,
+) -> None:
+    """Upsert sensor state.  Pass time_of_sample only when the state actually changed."""
+    attrs: dict = {"state": state_value}
+    if time_of_sample is not None:
+        attrs["ts"] = time_of_sample
+    if friendly_name is not None:
+        attrs["name"] = friendly_name
+    keys = list(attrs.keys())
+    _get_table().update_item(
+        Key={"user_id": user_id, "SK": f"sensor|{endpoint_id}"},
+        UpdateExpression="SET " + ", ".join(f"#k{i} = :v{i}" for i in range(len(keys))),
+        ExpressionAttributeNames={f"#k{i}": k for i, k in enumerate(keys)},
+        ExpressionAttributeValues={f":v{i}": v for i, v in enumerate(attrs.values())},
+    )
 
 
 # ---------------------------------------------------------------------------

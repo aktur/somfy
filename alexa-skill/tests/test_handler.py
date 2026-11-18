@@ -586,7 +586,7 @@ def test_discovery_sensor_has_correct_interface():
     assert "Alexa.MotionSensor"      in {c["interface"] for c in by_name["Motion sensor"]["capabilities"]}
     assert "Alexa.ContactSensor"     in {c["interface"] for c in by_name["Contact sensor"]["capabilities"]}
     assert "Alexa.TemperatureSensor" in {c["interface"] for c in by_name["Temperature sensor"]["capabilities"]}
-    assert "Alexa.ContactSensor"     in {c["interface"] for c in by_name["Rain 1"]["capabilities"]}
+    assert "Alexa.MotionSensor"      in {c["interface"] for c in by_name["Rain 1"]["capabilities"]}
 
 
 
@@ -654,7 +654,7 @@ def test_report_state_rain_detected():
          patch("somfy.get_sensor_states", return_value={"core:RainState": "detected"}):
         resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "RainSensor"))
     props = {p["namespace"]: p for p in resp["context"]["properties"]}
-    assert props["Alexa.ContactSensor"]["value"] == "DETECTED"
+    assert props["Alexa.MotionSensor"]["value"] == "DETECTED"
 
 
 def test_report_state_rain_not_detected():
@@ -663,7 +663,7 @@ def test_report_state_rain_not_detected():
          patch("somfy.get_sensor_states", return_value={"core:RainState": "notDetected"}):
         resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "RainSensor"))
     props = {p["namespace"]: p for p in resp["context"]["properties"]}
-    assert props["Alexa.ContactSensor"]["value"] == "NOT_DETECTED"
+    assert props["Alexa.MotionSensor"]["value"] == "NOT_DETECTED"
 
 
 def test_report_state_sensor_unavailable():
