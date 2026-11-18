@@ -16,6 +16,7 @@ DEVICE_URL = "io://XXXX-XXXX-XXXX/13387958"
 MOTION_URL = "io://XXXX-XXXX-XXXX/33333333"
 CONTACT_URL = "io://XXXX-XXXX-XXXX/44444444"
 TEMP_URL = "io://XXXX-XXXX-XXXX/55555555"
+RAIN_URL = "netatmo://NETATMO-XXXX/05:00:00:05:d0:f2#1"
 MOCK_TOKEN = "mock-scoped-token"
 MOCK_GINAITE_REFRESH = "mock-ginaite-refresh-token"
 _TEST_SECRET = "test-secret-do-not-use-in-production"
@@ -142,6 +143,8 @@ MOCK_SENSOR_SETUP = {
          "controllableName": "io:ContactIOSystemSensor", "states": []},
         {"deviceURL": TEMP_URL,    "label": "Temperature sensor",
          "controllableName": "io:TemperatureIOSystemSensor", "states": []},
+        {"deviceURL": RAIN_URL,    "label": "Rain-1",
+         "controllableName": "netatmo:RainComponent", "states": []},
     ],
     "rootPlace": {"label": "Home", "type": "HOME", "devices": [], "subPlaces": []},
 }
@@ -569,7 +572,7 @@ def test_discovery_includes_sensors():
          patch("somfy.get_setup", return_value=MOCK_SENSOR_SETUP):
         resp = handler.handle_discovery(_discovery_event())
     endpoints = resp["event"]["payload"]["endpoints"]
-    assert len(endpoints) == 3  # motion, contact, temperature
+    assert len(endpoints) == 4  # motion, contact, temperature, rain
 
 
 def test_discovery_sensor_has_correct_interface():
@@ -583,6 +586,7 @@ def test_discovery_sensor_has_correct_interface():
     assert "Alexa.MotionSensor"      in {c["interface"] for c in by_name["Motion sensor"]["capabilities"]}
     assert "Alexa.ContactSensor"     in {c["interface"] for c in by_name["Contact sensor"]["capabilities"]}
     assert "Alexa.TemperatureSensor" in {c["interface"] for c in by_name["Temperature sensor"]["capabilities"]}
+    assert "Alexa.ContactSensor"     in {c["interface"] for c in by_name["Rain 1"]["capabilities"]}
 
 
 
@@ -643,6 +647,23 @@ def test_report_state_temperature():
     props = {p["namespace"]: p for p in resp["context"]["properties"]}
     assert props["Alexa.TemperatureSensor"]["value"] == {"value": 21.5, "scale": "CELSIUS"}
 
+
+def test_report_state_rain_detected():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, RAIN_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value={"core:RainState": "detected"}):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "RainSensor"))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.ContactSensor"]["value"] == "DETECTED"
+
+
+def test_report_state_rain_not_detected():
+    endpoint_id = handler._encode_endpoint_id(SITE_OID, RAIN_URL)
+    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
+         patch("somfy.get_sensor_states", return_value={"core:RainState": "notDetected"}):
+        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "RainSensor"))
+    props = {p["namespace"]: p for p in resp["context"]["properties"]}
+    assert props["Alexa.ContactSensor"]["value"] == "NOT_DETECTED"
 
 
 def test_report_state_sensor_unavailable():

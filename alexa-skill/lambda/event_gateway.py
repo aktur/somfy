@@ -96,7 +96,7 @@ def send_change_report(
     """Send a ChangeReport for a motion or contact sensor."""
     if sensor_type == "MotionSensor":
         namespace = "Alexa.MotionSensor"
-    elif sensor_type == "ContactSensor":
+    elif sensor_type in ("ContactSensor", "RainSensor"):
         namespace = "Alexa.ContactSensor"
     else:
         raise ValueError(f"ChangeReport not supported for sensor_type: {sensor_type}")

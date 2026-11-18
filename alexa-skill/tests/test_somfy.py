@@ -97,6 +97,10 @@ def test_sensor_type_hue_dimmable_is_none():
     assert somfy.sensor_type({"controllableName": "hue:DimmableLightComponent"}) is None
 
 
+def test_sensor_type_rain():
+    assert somfy.sensor_type({"controllableName": "netatmo:RainComponent"}) == somfy.RAIN_SENSOR_TYPE
+
+
 def test_sensor_type_unknown_is_none():
     assert somfy.sensor_type({"controllableName": "homekit:StackComponent"}) is None
 

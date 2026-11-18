@@ -71,6 +71,7 @@ def _check_site(user_id: str, site_oid: str, devices: list[dict]) -> None:
             somfy.MOTION_SENSOR_TYPE,
             somfy.CONTACT_SENSOR_TYPE,
             somfy.TEMPERATURE_SENSOR_TYPE,
+            somfy.RAIN_SENSOR_TYPE,
         ):
             continue
 
@@ -89,6 +90,9 @@ def _check_site(user_id: str, site_oid: str, devices: list[dict]) -> None:
         if stype == somfy.MOTION_SENSOR_TYPE:
             occupancy = states.get("core:OccupancyState", "")
             new_state = "DETECTED" if occupancy == "personInside" else "NOT_DETECTED"
+        elif stype == somfy.RAIN_SENSOR_TYPE:
+            rain = states.get("core:RainState", "notDetected")
+            new_state = "DETECTED" if rain == "detected" else "NOT_DETECTED"
         else:
             contact = states.get("core:ContactState", "closed")
             new_state = "DETECTED" if contact == "open" else "NOT_DETECTED"

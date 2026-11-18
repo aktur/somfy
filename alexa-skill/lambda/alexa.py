@@ -242,6 +242,20 @@ _SENSOR_CONFIG: dict[str, dict] = {
             },
         },
     },
+    "RainSensor": {
+        "description": "Somfy Rain Sensor",
+        "category": "CONTACT_SENSOR",
+        "capability": {
+            "type": "AlexaInterface",
+            "interface": "Alexa.ContactSensor",
+            "version": "3",
+            "properties": {
+                "supported": [{"name": "detectionState"}],
+                "proactivelyReported": True,
+                "retrievable": True,
+            },
+        },
+    },
 }
 
 
@@ -323,6 +337,15 @@ def _sensor_properties(
                 "timeOfSample": _now(),
                 "uncertaintyInMilliseconds": uncertainty_ms,
             })
+    elif sensor_type == "RainSensor":
+        rain = states.get("core:RainState", "notDetected")
+        props.append({
+            "namespace": "Alexa.ContactSensor",
+            "name": "detectionState",
+            "value": "DETECTED" if rain == "detected" else "NOT_DETECTED",
+            "timeOfSample": _now(),
+            "uncertaintyInMilliseconds": uncertainty_ms,
+        })
 
     return props
 
