@@ -64,16 +64,12 @@ def _encode_endpoint_id(site_oid: str, device_url: str) -> str:
     return urllib.parse.quote(f"{site_oid}|{device_url}", safe="").replace("%", ".")
 
 
-_LUX_CHANGE_THRESHOLD = 50.0
-
-
 def _check_site(user_id: str, site_oid: str, devices: list[dict]) -> None:
     for device in devices:
         stype = somfy.sensor_type(device)
         if stype not in (
             somfy.MOTION_SENSOR_TYPE,
             somfy.CONTACT_SENSOR_TYPE,
-            somfy.LIGHT_SENSOR_TYPE,
             somfy.TEMPERATURE_SENSOR_TYPE,
         ):
             continue
@@ -85,11 +81,6 @@ def _check_site(user_id: str, site_oid: str, devices: list[dict]) -> None:
         device_url = device["deviceURL"]
         endpoint_id = _encode_endpoint_id(site_oid, device_url)
         ts = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
-
-        if stype == somfy.LIGHT_SENSOR_TYPE:
-            print(f"[poller] LightSensor found: {device.get('label', device_url)} states={list(states.keys())}")
-            _check_lux(user_id, endpoint_id, states, ts)
-            continue
 
         if stype == somfy.TEMPERATURE_SENSOR_TYPE:
             _check_temperature(user_id, endpoint_id, states, ts)
@@ -115,7 +106,7 @@ def _check_site(user_id: str, site_oid: str, devices: list[dict]) -> None:
         token_store.save_sensor_state(user_id, endpoint_id, new_state, ts)
 
 
-_TEMPERATURE_CHANGE_THRESHOLD = 0.5  # °C
+_TEMPERATURE_CHANGE_THRESHOLD = 0.5
 
 
 def _check_temperature(user_id: str, endpoint_id: str, states: dict, ts: str) -> None:
@@ -138,22 +129,3 @@ def _check_temperature(user_id: str, endpoint_id: str, states: dict, ts: str) ->
     token_store.save_sensor_state(user_id, endpoint_id, str(new_temp), ts)
 
 
-def _check_lux(user_id: str, endpoint_id: str, states: dict, ts: str) -> None:
-    raw = states.get("core:LuminanceState") if "core:LuminanceState" in states \
-        else states.get("core:SunShineState")
-    if raw is None:
-        return
-
-    new_lux = float(raw)
-    stored = token_store.get_sensor_state(user_id, endpoint_id)
-    old_lux = float(stored["state"]) if stored and stored["state"] is not None else None
-
-    if old_lux is None or abs(new_lux - old_lux) >= _LUX_CHANGE_THRESHOLD:
-        if old_lux is not None:
-            print(f"[poller] lux change: user={user_id} {endpoint_id} {old_lux} → {new_lux}")
-        try:
-            event_gateway.send_lux_change_report(user_id, endpoint_id, new_lux, ts)
-        except Exception as exc:
-            print(f"[poller] Lux ChangeReport failed for {endpoint_id}: {exc}")
-
-    token_store.save_sensor_state(user_id, endpoint_id, str(new_lux), ts)

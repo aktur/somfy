@@ -16,7 +16,6 @@ DEVICE_URL = "io://XXXX-XXXX-XXXX/13387958"
 MOTION_URL = "io://XXXX-XXXX-XXXX/33333333"
 CONTACT_URL = "io://XXXX-XXXX-XXXX/44444444"
 TEMP_URL = "io://XXXX-XXXX-XXXX/55555555"
-LIGHT_URL = "io://XXXX-XXXX-XXXX/66666666"
 MOCK_TOKEN = "mock-scoped-token"
 MOCK_GINAITE_REFRESH = "mock-ginaite-refresh-token"
 _TEST_SECRET = "test-secret-do-not-use-in-production"
@@ -143,9 +142,6 @@ MOCK_SENSOR_SETUP = {
          "controllableName": "io:ContactIOSystemSensor", "states": []},
         {"deviceURL": TEMP_URL,    "label": "Temperature sensor",
          "controllableName": "io:TemperatureIOSystemSensor", "states": []},
-        # Light sensor excluded — no suitable read-only Alexa interface
-        {"deviceURL": LIGHT_URL,   "label": "Light sensor",
-         "controllableName": "io:LightIOSystemSensor", "states": []},
     ],
     "rootPlace": {"label": "Home", "type": "HOME", "devices": [], "subPlaces": []},
 }
@@ -573,7 +569,7 @@ def test_discovery_includes_sensors():
          patch("somfy.get_setup", return_value=MOCK_SENSOR_SETUP):
         resp = handler.handle_discovery(_discovery_event())
     endpoints = resp["event"]["payload"]["endpoints"]
-    assert len(endpoints) == 4  # motion, contact, temperature, light
+    assert len(endpoints) == 3  # motion, contact, temperature
 
 
 def test_discovery_sensor_has_correct_interface():
@@ -587,7 +583,7 @@ def test_discovery_sensor_has_correct_interface():
     assert "Alexa.MotionSensor"      in {c["interface"] for c in by_name["Motion sensor"]["capabilities"]}
     assert "Alexa.ContactSensor"     in {c["interface"] for c in by_name["Contact sensor"]["capabilities"]}
     assert "Alexa.TemperatureSensor" in {c["interface"] for c in by_name["Temperature sensor"]["capabilities"]}
-    assert "Alexa.RangeController"   in {c["interface"] for c in by_name["Light sensor"]["capabilities"]}
+
 
 
 def test_discovery_sensor_has_sensor_type_cookie():
@@ -647,32 +643,6 @@ def test_report_state_temperature():
     props = {p["namespace"]: p for p in resp["context"]["properties"]}
     assert props["Alexa.TemperatureSensor"]["value"] == {"value": 21.5, "scale": "CELSIUS"}
 
-
-def test_report_state_light():
-    endpoint_id = handler._encode_endpoint_id(SITE_OID, LIGHT_URL)
-    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
-         patch("somfy.get_sensor_states", return_value={"core:LuminanceState": 1000.0}):
-        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "LightSensor"))
-    props = {(p["namespace"], p.get("instance", "")): p for p in resp["context"]["properties"]}
-    assert props[("Alexa.RangeController", "Sensor.Illuminance")]["value"] == 1000.0
-
-
-def test_report_state_light_sunshine_fallback():
-    endpoint_id = handler._encode_endpoint_id(SITE_OID, LIGHT_URL)
-    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
-         patch("somfy.get_sensor_states", return_value={"core:SunShineState": 75.0}):
-        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "LightSensor"))
-    props = {(p["namespace"], p.get("instance", "")): p for p in resp["context"]["properties"]}
-    assert props[("Alexa.RangeController", "Sensor.Illuminance")]["value"] == 75.0
-
-
-def test_report_state_light_luminance_preferred_over_sunshine():
-    endpoint_id = handler._encode_endpoint_id(SITE_OID, LIGHT_URL)
-    with patch.object(handler, "_site_token", return_value=MOCK_TOKEN), \
-         patch("somfy.get_sensor_states", return_value={"core:LuminanceState": 500.0, "core:SunShineState": 60.0}):
-        resp = handler.handle_report_state(_sensor_report_state_event(endpoint_id, "LightSensor"))
-    props = {(p["namespace"], p.get("instance", "")): p for p in resp["context"]["properties"]}
-    assert props[("Alexa.RangeController", "Sensor.Illuminance")]["value"] == 500.0
 
 
 def test_report_state_sensor_unavailable():

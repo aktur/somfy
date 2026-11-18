@@ -31,13 +31,11 @@ _SUPPORTED_TYPES = (ROLLER_SHUTTER_TYPE, AWNING_TYPE)
 MOTION_SENSOR_TYPE = "MotionSensor"
 CONTACT_SENSOR_TYPE = "ContactSensor"
 TEMPERATURE_SENSOR_TYPE = "TemperatureSensor"
-LIGHT_SENSOR_TYPE = "LightSensor"
 
 _SENSOR_PATTERNS: dict[str, tuple[str, ...]] = {
     MOTION_SENSOR_TYPE:      ("Occupancy", "Motion", "Presence"),
     CONTACT_SENSOR_TYPE:     ("Contact",),
     TEMPERATURE_SENSOR_TYPE: ("Temperature",),
-    LIGHT_SENSOR_TYPE:       ("Light", "Luminance", "Sunshine"),
 }
 
 

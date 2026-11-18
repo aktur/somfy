@@ -162,36 +162,3 @@ def send_temperature_change_report(
     )
 
 
-def send_lux_change_report(
-    user_id: str,
-    endpoint_id: str,
-    lux_value: float,
-    time_of_sample: str,
-) -> None:
-    """Send a ChangeReport for a light sensor (Alexa.RangeController / Sensor.Illuminance)."""
-    access_token = get_valid_access_token(user_id)
-    health_prop = {
-        "namespace": "Alexa.EndpointHealth",
-        "name": "connectivity",
-        "value": {"value": "OK"},
-        "timeOfSample": time_of_sample,
-        "uncertaintyInMilliseconds": 0,
-    }
-    change_prop = {
-        "namespace": "Alexa.RangeController",
-        "instance": "Sensor.Illuminance",
-        "name": "rangeValue",
-        "value": lux_value,
-        "timeOfSample": time_of_sample,
-        "uncertaintyInMilliseconds": 0,
-    }
-    payload = _build_change_report(endpoint_id, access_token, [change_prop], [health_prop])
-
-    status = _post_with_retry(user_id, payload)
-    if status not in (200, 202):
-        raise RuntimeError(f"Event Gateway rejected lux ChangeReport: HTTP {status}")
-
-    print(
-        f"[event_gateway] Lux ChangeReport sent: endpointId={endpoint_id}"
-        f" lux={lux_value} status={status}"
-    )

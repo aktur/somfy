@@ -85,10 +85,6 @@ def test_sensor_type_temperature():
     assert somfy.sensor_type({"controllableName": "io:TemperatureIOSystemSensor"}) == somfy.TEMPERATURE_SENSOR_TYPE
 
 
-def test_sensor_type_light():
-    assert somfy.sensor_type({"controllableName": "io:LightIOSystemSensor"}) == somfy.LIGHT_SENSOR_TYPE
-
-
 def test_sensor_type_shutter_is_none():
     assert somfy.sensor_type({"controllableName": "io:RollerShutterGenericIOComponent"}) is None
 

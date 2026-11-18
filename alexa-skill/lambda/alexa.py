@@ -242,30 +242,6 @@ _SENSOR_CONFIG: dict[str, dict] = {
             },
         },
     },
-    "LightSensor": {
-        "description": "Somfy Light Sensor",
-        "category": "LIGHT_SENSOR",
-        "capability": {
-            "type": "AlexaInterface",
-            "interface": "Alexa.RangeController",
-            "instance": "Sensor.Illuminance",
-            "version": "3",
-            "properties": {
-                "supported": [{"name": "rangeValue"}],
-                "proactivelyReported": True,
-                "retrievable": True,
-                "nonControllable": True,
-            },
-            "capabilityResources": {
-                "friendlyNames": [
-                    {"@type": "text", "value": {"text": "Brightness", "locale": "en-US"}},
-                ]
-            },
-            "configuration": {
-                "supportedRange": {"minimumValue": 0, "maximumValue": 100000, "precision": 1},
-            },
-        },
-    },
 }
 
 
@@ -344,20 +320,6 @@ def _sensor_properties(
                 "namespace": "Alexa.TemperatureSensor",
                 "name": "temperature",
                 "value": {"value": float(temp), "scale": "CELSIUS"},
-                "timeOfSample": _now(),
-                "uncertaintyInMilliseconds": uncertainty_ms,
-            })
-    elif sensor_type == "LightSensor":
-        # Somfy io: sensors may report lux (core:LuminanceState) or sunshine
-        # percentage (core:SunShineState) depending on the hardware model.
-        raw = states.get("core:LuminanceState") if "core:LuminanceState" in states \
-            else states.get("core:SunShineState")
-        if raw is not None:
-            props.append({
-                "namespace": "Alexa.RangeController",
-                "instance": "Sensor.Illuminance",
-                "name": "rangeValue",
-                "value": float(raw),
                 "timeOfSample": _now(),
                 "uncertaintyInMilliseconds": uncertainty_ms,
             })
