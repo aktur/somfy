@@ -29,11 +29,11 @@ def _get(name: str) -> str | None:
         return None
 
 
-def _put(name: str, value: str) -> None:
+def _put(name: str, value: str, *, secure: bool = True) -> None:
     _client().put_parameter(
         Name=f"{_SSM_PREFIX}/{name}",
         Value=value,
-        Type="SecureString",
+        Type="SecureString" if secure else "String",
         Overwrite=True,
     )
 
@@ -106,4 +106,4 @@ def get_sensor_state(endpoint_id: str) -> dict | None:
 
 
 def save_sensor_state(endpoint_id: str, state_value: str, time_of_sample: str) -> None:
-    _put(_sensor_ssm_name(endpoint_id), json.dumps({"state": state_value, "ts": time_of_sample}))
+    _put(_sensor_ssm_name(endpoint_id), json.dumps({"state": state_value, "ts": time_of_sample}), secure=False)
